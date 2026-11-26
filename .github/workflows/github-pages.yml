@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-# Free host: https://arnoldocaya.github.io/deed-car-financing-campaign/
+# Free host: https://deedmicrofinance.github.io/deed-car-financing-campaign/
 # Needs Settings > Pages > Source: "GitHub Actions". Deploys on every push to main.
 # To stop it (e.g. after moving to Firebase Hosting), add the repository variable DISABLE_PAGES = true.
 

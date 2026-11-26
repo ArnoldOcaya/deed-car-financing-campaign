@@ -12,7 +12,7 @@ var SETTINGS = {
   // Who gets an email for every new lead is managed in the staff portal (Team > New lead emails).
   // This needs the Google account that owns this script to have access to the Firebase project.
   FIREBASE_PROJECT_ID: 'deed-car-financing',
-  PORTAL_URL: 'https://arnoldocaya.github.io/deed-car-financing-campaign/portal/',
+  PORTAL_URL: 'https://deedmicrofinance.github.io/deed-car-financing-campaign/portal/',
   CONTRIBUTION_PCT: 30,
   RAW_SHEET: 'Raw Submissions',
   TRACKER_SHEET: 'Lead Tracker',
