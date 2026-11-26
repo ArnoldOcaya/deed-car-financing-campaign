@@ -1,0 +1,28 @@
+name: Deploy to Firebase Hosting
+
+# Runs on every push to main once these are set in
+# GitHub > Settings > Secrets and variables > Actions:
+#   Variables tab: FIREBASE_PROJECT_ID  (e.g. deed-car-financing)
+#   Secrets tab:   FIREBASE_SERVICE_ACCOUNT  (JSON key, see docs/FIREBASE_SETUP.md)
+# Until then the job is skipped, so you won't see failures.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ vars.FIREBASE_PROJECT_ID != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: ${{ vars.FIREBASE_PROJECT_ID }}
+          channelId: live

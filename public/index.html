@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Drive Your Dream. Pay 30%. | DEED Microfinance</title>
+  <meta name="description" content="Put down 30% of your car's price and let DEED Microfinance help finance the remaining 70%, subject to approval. Apply in 2 minutes.">
+  <meta name="theme-color" content="#282c69">
+  <meta property="og:image" content="img/deed-logo.png">
+  <meta property="og:title" content="Drive Your Dream. Pay 30%.">
+  <meta property="og:description" content="Put down 30%. Let DEED help finance the remaining 70%, subject to approval.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="favicon.png" type="image/png">
+  <link rel="apple-touch-icon" href="img/deed-emblem.png">
+  <link rel="preload" as="image" href="img/deed-logo.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top" aria-label="DEED Microfinance home">
+        <img src="img/deed-logo.png" alt="DEED Microfinance. We Care About Your Growth" width="180" height="97" class="brand-logo">
+        <span class="brand-partner">× <span data-partner>Partner Car Bond</span></span>
+      </a>
+      <a class="btn btn-sm btn-primary" href="#apply">Apply</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-inner">
+        <p class="eyebrow">Drive Your Dream. Pay 30%.</p>
+        <h1>Your next car is closer than you think.</h1>
+        <p class="lede">Put down <strong>30%</strong>. Let DEED help finance the remaining <strong>70%</strong>, subject to approval.</p>
+
+        <div class="split" role="img" aria-label="You contribute 30 percent, DEED finances up to 70 percent">
+          <div class="split-you">
+            <span class="split-num">30%</span>
+            <span class="split-label">Your contribution</span>
+          </div>
+          <div class="split-deed">
+            <span class="split-num">70%</span>
+            <span class="split-label">Financing by DEED*</span>
+          </div>
+        </div>
+
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#apply">Apply in 2 minutes</a>
+          <a class="btn btn-ghost-light" href="#calculator">Try the calculator</a>
+        </div>
+        <p class="fineprint">*Subject to loan assessment, terms and approval.</p>
+      </div>
+      <svg class="hero-car" viewBox="0 0 400 140" aria-hidden="true" focusable="false">
+        <path d="M30 100c0-12 6-20 20-23l50-10 40-30c8-6 18-9 28-9h90c12 0 22 5 30 13l32 30 40 8c14 3 20 10 20 21v12c0 4-3 7-7 7h-26a34 34 0 0 0-66 0H138a34 34 0 0 0-66 0H37c-4 0-7-3-7-7z" fill="currentColor" opacity=".16"/>
+        <path d="M150 40h55v30h-80zM215 40h45c6 0 11 2 15 6l24 24h-84z" fill="currentColor" opacity=".22"/>
+        <circle cx="105" cy="113" r="24" fill="currentColor" opacity=".3"/>
+        <circle cx="303" cy="113" r="24" fill="currentColor" opacity=".3"/>
+      </svg>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="section how">
+      <div class="wrap">
+        <h2>How it works</h2>
+        <ol class="steps">
+          <li><span class="step-n">1</span><div><strong>Pick your car</strong><p>Choose the vehicle you want at <span data-partner>the car bond</span>.</p></div></li>
+          <li><span class="step-n">2</span><div><strong>Apply in 2 minutes</strong><p>Tell us about the car and what you can contribute.</p></div></li>
+          <li><span class="step-n">3</span><div><strong>A DEED officer calls you</strong><p>We confirm your eligibility and explain the requirements.</p></div></li>
+          <li><span class="step-n">4</span><div><strong>Drive away</strong><p>Assessment, approval, your 30% contribution, then vehicle release.</p></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- CALCULATOR -->
+    <section class="section calc" id="calculator">
+      <div class="wrap">
+        <h2>Try your vehicle price</h2>
+        <div class="card">
+          <label class="field-label" for="calc-price">Vehicle price (UGX)</label>
+          <div class="money-input">
+            <span>UGX</span>
+            <input id="calc-price" inputmode="numeric" autocomplete="off" placeholder="30,000,000" value="30,000,000" aria-describedby="calc-note">
+          </div>
+          <div class="chips" role="group" aria-label="Example prices">
+            <button type="button" class="chip" data-price="20000000">20M</button>
+            <button type="button" class="chip" data-price="30000000">30M</button>
+            <button type="button" class="chip" data-price="40000000">40M</button>
+            <button type="button" class="chip" data-price="50000000">50M</button>
+          </div>
+
+          <div class="results">
+            <div class="result result-you">
+              <span class="result-label">Your <span data-pct-you>30</span>% contribution</span>
+              <span class="result-value"><small>UGX</small> <output id="calc-you">9,000,000</output></span>
+            </div>
+            <div class="result result-deed">
+              <span class="result-label">Financing <span data-pct-deed>70</span>%</span>
+              <span class="result-value"><small>UGX</small> <output id="calc-deed">21,000,000</output></span>
+            </div>
+          </div>
+          <div class="bar" aria-hidden="true"><span class="bar-you"></span><span class="bar-deed"></span></div>
+
+          <details class="readiness">
+            <summary>Am I ready? Check your contribution</summary>
+            <label class="field-label" for="calc-have">How much can you contribute today? (UGX)</label>
+            <div class="money-input">
+              <span>UGX</span>
+              <input id="calc-have" inputmode="numeric" autocomplete="off" placeholder="e.g. 7,000,000">
+            </div>
+            <div class="meter" aria-hidden="true"><span id="ready-fill"></span></div>
+            <p id="ready-msg" class="ready-msg" aria-live="polite">Enter an amount to see how close you are.</p>
+            <p class="fineprint">This is a readiness check, not a credit approval or eligibility decision.</p>
+          </details>
+
+          <p id="calc-note" class="fineprint">This is an illustrative split of the vehicle price, not a loan quotation. Interest, fees, repayment period and approval conditions are not included.</p>
+          <a class="btn btn-primary btn-block" href="#apply" id="calc-apply">Apply with this price</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- APPLICATION FORM -->
+    <section class="section apply" id="apply">
+      <div class="wrap">
+        <h2>Quick application</h2>
+        <p class="muted">About 2 minutes. No documents needed now.</p>
+
+        <form id="lead-form" class="card form" novalidate>
+          <div class="progress" aria-hidden="true"><span id="progress-fill"></span></div>
+          <p class="step-count" id="step-count" aria-live="polite">Step 1 of 4</p>
+
+          <!-- Honeypot: humans never see this -->
+          <div class="hp" aria-hidden="true">
+            <label>Leave this empty <input type="text" name="company_website" tabindex="-1" autocomplete="off"></label>
+          </div>
+
+          <!-- STEP 1: Personal -->
+          <fieldset class="step" data-step="1">
+            <legend>About you</legend>
+            <div class="field">
+              <label for="full_name">Full name <span class="req">*</span></label>
+              <input id="full_name" name="full_name" autocomplete="name" required maxlength="100">
+            </div>
+            <div class="field">
+              <label for="phone">Phone number <span class="req">*</span></label>
+              <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="07XXXXXXXX or +2567XXXXXXXX" data-validate="ug-phone">
+            </div>
+            <div class="field">
+              <label for="alt_phone">Alternative phone number</label>
+              <input id="alt_phone" name="alt_phone" type="tel" inputmode="tel" placeholder="Optional" data-validate="ug-phone-optional">
+            </div>
+            <div class="field">
+              <span class="label" id="contact_method_l">Preferred contact method <span class="req">*</span></span>
+              <div class="seg" role="radiogroup" aria-labelledby="contact_method_l">
+                <label><input type="radio" name="contact_method" value="Call" required><span>Call</span></label>
+                <label><input type="radio" name="contact_method" value="WhatsApp"><span>WhatsApp</span></label>
+                <label><input type="radio" name="contact_method" value="Either"><span>Either</span></label>
+              </div>
+            </div>
+            <div class="field">
+              <label for="area">District or area of residence <span class="req">*</span></label>
+              <input id="area" name="area" autocomplete="address-level2" required maxlength="80" placeholder="e.g. Kampala, Nakawa">
+            </div>
+          </fieldset>
+
+          <!-- STEP 2: Vehicle -->
+          <fieldset class="step" data-step="2" hidden>
+            <legend>The vehicle</legend>
+            <div class="field">
+              <label for="vehicle">Which vehicle are you interested in? <span class="req">*</span></label>
+              <input id="vehicle" name="vehicle" required maxlength="100" placeholder="e.g. Toyota Harrier, Subaru Forester">
+            </div>
+            <div class="row3">
+              <div class="field">
+                <label for="vehicle_make">Make</label>
+                <input id="vehicle_make" name="vehicle_make" maxlength="40" placeholder="Toyota">
+              </div>
+              <div class="field">
+                <label for="vehicle_model">Model</label>
+                <input id="vehicle_model" name="vehicle_model" maxlength="40" placeholder="Harrier">
+              </div>
+              <div class="field">
+                <label for="vehicle_year">Year</label>
+                <input id="vehicle_year" name="vehicle_year" inputmode="numeric" maxlength="4" placeholder="2015" data-validate="year-optional">
+              </div>
+            </div>
+            <div class="field">
+              <label for="vehicle_price">Vehicle price (UGX) <span class="req">*</span></label>
+              <div class="money-input">
+                <span>UGX</span>
+                <input id="vehicle_price" name="vehicle_price" inputmode="numeric" required data-money data-validate="money">
+              </div>
+              <p class="hint" id="price-split"></p>
+            </div>
+            <div class="field">
+              <span class="label" id="from_partner_l">Are you buying from <span data-partner>the partner car bond</span>? <span class="req">*</span></span>
+              <div class="seg" role="radiogroup" aria-labelledby="from_partner_l">
+                <label><input type="radio" name="from_partner" value="Yes" required><span>Yes</span></label>
+                <label><input type="radio" name="from_partner" value="No"><span>No</span></label>
+                <label><input type="radio" name="from_partner" value="Still deciding"><span>Deciding</span></label>
+              </div>
+            </div>
+            <div class="field" data-show-if="from_partner=Yes">
+              <label for="salesperson">Which car bond or salesperson are you dealing with?</label>
+              <input id="salesperson" name="salesperson" maxlength="80" placeholder="Optional">
+            </div>
+          </fieldset>
+
+          <!-- STEP 3: Financing -->
+          <fieldset class="step" data-step="3" hidden>
+            <legend>Financing</legend>
+            <div class="field">
+              <span class="label" id="can_raise_l">Can you raise the 30% contribution? <span class="req">*</span></span>
+              <div class="stack" role="radiogroup" aria-labelledby="can_raise_l">
+                <label><input type="radio" name="can_raise" value="Yes" required><span>Yes</span></label>
+                <label><input type="radio" name="can_raise" value="Partially"><span>Partially</span></label>
+                <label><input type="radio" name="can_raise" value="Not yet, but interested"><span>Not yet, but interested</span></label>
+              </div>
+            </div>
+            <div class="field">
+              <label for="available_contribution">How much can you contribute now? (UGX) <span class="req">*</span></label>
+              <div class="money-input">
+                <span>UGX</span>
+                <input id="available_contribution" name="available_contribution" inputmode="numeric" required data-money data-validate="money-zero">
+              </div>
+            </div>
+            <div class="field">
+              <label for="timeline">When would you like to buy? <span class="req">*</span></label>
+              <select id="timeline" name="timeline" required>
+                <option value="">Choose one</option>
+                <option>Within 2 weeks</option>
+                <option>Within 1 month</option>
+                <option>In 1 to 3 months</option>
+                <option>In more than 3 months</option>
+                <option>Just exploring</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="repayment_period">Preferred repayment period</label>
+              <select id="repayment_period" name="repayment_period"></select>
+            </div>
+            <div class="field">
+              <span class="label" id="income_l">Source of income <span class="req">*</span></span>
+              <div class="seg seg-wrap" role="radiogroup" aria-labelledby="income_l">
+                <label><input type="radio" name="income_source" value="Employed" required><span>Employed</span></label>
+                <label><input type="radio" name="income_source" value="Business owner"><span>Business owner</span></label>
+                <label><input type="radio" name="income_source" value="Self-employed"><span>Self-employed</span></label>
+                <label><input type="radio" name="income_source" value="Other"><span>Other</span></label>
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- STEP 4: Follow-up + consent -->
+          <fieldset class="step" data-step="4" hidden>
+            <legend>Follow-up</legend>
+            <div class="field">
+              <span class="label" id="wants_contact_l">Would you like a DEED loan officer to contact you? <span class="req">*</span></span>
+              <div class="seg" role="radiogroup" aria-labelledby="wants_contact_l">
+                <label><input type="radio" name="wants_contact" value="Yes" required checked><span>Yes</span></label>
+                <label><input type="radio" name="wants_contact" value="No"><span>No</span></label>
+              </div>
+            </div>
+            <div class="field">
+              <span class="label" id="contact_time_l">Best time to contact you <span class="req">*</span></span>
+              <div class="seg" role="radiogroup" aria-labelledby="contact_time_l">
+                <label><input type="radio" name="contact_time" value="Morning" required><span>Morning</span></label>
+                <label><input type="radio" name="contact_time" value="Afternoon"><span>Afternoon</span></label>
+                <label><input type="radio" name="contact_time" value="Evening"><span>Evening</span></label>
+              </div>
+            </div>
+            <div class="field">
+              <label for="questions">Any questions about vehicle financing?</label>
+              <textarea id="questions" name="questions" rows="3" maxlength="1000" placeholder="Optional"></textarea>
+            </div>
+            <div class="consent">
+              <p>I consent to <span data-brand>DEED Microfinance</span> collecting and using the information I provide to contact me regarding vehicle financing, assess my financing interest and guide me through the application process. I understand that submitting this form does not guarantee loan approval. My information will be handled in accordance with <span data-brand>DEED Microfinance</span>'s privacy practices.</p>
+              <label class="check"><input type="checkbox" name="consent" value="Yes" required><span>I agree to the above and consent to being contacted by <span data-brand>DEED Microfinance</span>. <span class="req">*</span></span></label>
+            </div>
+          </fieldset>
+
+          <p class="form-error" id="form-error" role="alert" hidden></p>
+
+          <div class="form-nav">
+            <button type="button" class="btn btn-ghost" id="btn-back" hidden>Back</button>
+            <button type="button" class="btn btn-primary" id="btn-next">Next</button>
+            <button type="submit" class="btn btn-primary" id="btn-submit" hidden>Submit application</button>
+          </div>
+        </form>
+
+        <!-- SUCCESS -->
+        <div class="card success" id="success" hidden tabindex="-1">
+          <div class="success-icon" aria-hidden="true">✓</div>
+          <h3>Thank you! We've received your application.</h3>
+          <p>A DEED loan officer will contact you soon. Your reference is <strong id="lead-ref">—</strong>.</p>
+          <p class="muted">Submitting this form does not guarantee loan approval.</p>
+          <div class="success-actions">
+            <a class="btn btn-whatsapp" data-whatsapp target="_blank" rel="noopener">Chat on WhatsApp</a>
+            <button type="button" class="btn btn-ghost" data-share>Share with a friend</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TALK TO SOMEONE -->
+    <section class="section talk">
+      <div class="wrap">
+        <h2>Prefer to talk first?</h2>
+        <p class="muted">Speak to a DEED financing officer before you apply.</p>
+        <div class="talk-grid">
+          <a class="btn btn-whatsapp btn-block" data-whatsapp target="_blank" rel="noopener">WhatsApp us</a>
+          <button type="button" class="btn btn-ghost btn-block" id="open-callback">Request a call back</button>
+          <a class="btn btn-ghost btn-block" data-call>Call now</a>
+          <button type="button" class="btn btn-ghost btn-block" data-share>Share this offer</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap">
+      <p><strong data-brand>DEED Microfinance</strong> × <span data-partner>Partner Car Bond</span></p>
+      <p class="tagline">We Care About Your Growth</p>
+      <p class="fineprint">Financing is subject to loan assessment, terms and approval. Figures on this page are illustrative and are not a loan offer or quotation.</p>
+    </div>
+  </footer>
+
+  <!-- Sticky mobile action bar -->
+  <nav class="dock" aria-label="Quick actions">
+    <a class="dock-btn dock-wa" data-whatsapp target="_blank" rel="noopener">WhatsApp</a>
+    <a class="dock-btn dock-apply" href="#apply">Apply now</a>
+  </nav>
+
+  <!-- Call-back dialog -->
+  <dialog id="callback-dialog" aria-labelledby="cb-title">
+    <form id="callback-form" method="dialog" novalidate>
+      <h3 id="cb-title">Request a call back</h3>
+      <p class="muted">A DEED officer will call you.</p>
+      <div class="hp" aria-hidden="true"><input type="text" name="company_website" tabindex="-1" autocomplete="off"></div>
+      <div class="field">
+        <label for="cb_name">Your name <span class="req">*</span></label>
+        <input id="cb_name" name="full_name" autocomplete="name" required maxlength="100">
+      </div>
+      <div class="field">
+        <label for="cb_phone">Phone number <span class="req">*</span></label>
+        <input id="cb_phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="07XXXXXXXX" data-validate="ug-phone">
+      </div>
+      <div class="field">
+        <span class="label" id="cb_time_l">Best time <span class="req">*</span></span>
+        <div class="seg" role="radiogroup" aria-labelledby="cb_time_l">
+          <label><input type="radio" name="contact_time" value="Morning" required><span>Morning</span></label>
+          <label><input type="radio" name="contact_time" value="Afternoon"><span>Afternoon</span></label>
+          <label><input type="radio" name="contact_time" value="Evening"><span>Evening</span></label>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="consent" value="Yes" required><span>I consent to being contacted by <span data-brand>DEED Microfinance</span> about vehicle financing. <span class="req">*</span></span></label>
+      <p class="form-error" id="cb-error" role="alert" hidden></p>
+      <p class="cb-done" id="cb-done" hidden>Thanks! We'll call you soon.</p>
+      <div class="form-nav">
+        <button type="button" class="btn btn-ghost" id="cb-cancel">Close</button>
+        <button type="submit" class="btn btn-primary" id="cb-submit">Call me back</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
