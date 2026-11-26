@@ -1,9 +1,8 @@
-name: Deploy to GitHub Pages (backup host)
+name: Deploy to GitHub Pages
 
-# Optional free backup host. To turn on:
-#   1. Settings > Pages > Source: "GitHub Actions"
-#   2. Settings > Secrets and variables > Actions > Variables: ENABLE_PAGES = true
-# Or run it by hand from the Actions tab.
+# Free host: https://arnoldocaya.github.io/deed-car-financing-campaign/
+# Needs Settings > Pages > Source: "GitHub Actions". Deploys on every push to main.
+# To stop it (e.g. after moving to Firebase Hosting), add the repository variable DISABLE_PAGES = true.
 
 on:
   push:
@@ -21,15 +20,15 @@ concurrency:
 
 jobs:
   deploy:
-    if: ${{ vars.ENABLE_PAGES == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ vars.DISABLE_PAGES != 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: public
       - id: deployment
