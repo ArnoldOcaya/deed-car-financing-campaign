@@ -3,7 +3,7 @@ import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebas
 import { readFileSync } from "fs";
 import { doc, collection, runTransaction, serverTimestamp, setDoc, getDoc, getDocs, query, where, updateDoc, addDoc, writeBatch } from "firebase/firestore";
 
-const env = await initializeTestEnvironment({ projectId: "demo-deed", firestore: { rules: readFileSync(new URL("../firestore.rules", import.meta.url), "utf8").replace(/\['admin@example\.com'\]/, "['owner@test.com']"), host: "127.0.0.1", port: 8085 } });
+const env = await initializeTestEnvironment({ projectId: "demo-deed", firestore: { rules: readFileSync(new URL("../firestore.rules", import.meta.url), "utf8").replace(/(function ownerEmails\(\) \{\s*return )\[[^\]]*\]/, "$1['owner@test.com']"), host: "127.0.0.1", port: 8085 } });
 let pass = 0, failN = 0;
 async function t(name, p) { try { await p; pass++; console.log("ok  ", name); } catch (e) { failN++; console.log("FAIL", name, e.message.split("\n")[0]); } }
 const user = (email) => env.authenticatedContext(email, { email, email_verified: true }).firestore();
