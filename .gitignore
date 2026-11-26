@@ -1,5 +1,5 @@
+*-service-account*.json
+.DS_Store
 .firebase/
 firebase-debug.log
 node_modules/
-.DS_Store
-*-service-account*.json

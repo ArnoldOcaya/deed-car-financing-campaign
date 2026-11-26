@@ -10,44 +10,49 @@ Every QR code carries its own `?source=` so each lead shows where it came from.
 
 | Path | What it does |
 | --- | --- |
-| `public/index.html` | The landing page: hero, how it works, UGX calculator with readiness check, 4-step application form, WhatsApp, call-back request, call, share. |
-| `public/config.js` | **The one file to edit**: Google Sheet URL, WhatsApp/phone numbers, partner name, repayment terms. |
-| `public/qr.html` | Staff tool: makes printable QR codes, one per placement (`/qr.html` on the live site). |
-| `apps-script/Code.gs` | Google Apps Script that writes leads into the Sheet and builds the Lead Tracker and Dashboard. |
-| `firebase.json` | Firebase Hosting settings. |
-| `.github/workflows/` | Auto-deploy to Firebase on every push; optional GitHub Pages backup. |
+| `public/index.html` | Landing page: hero, how it works, UGX calculator with readiness check, 4-step application, WhatsApp, call-back, call, share. |
+| `public/portal/` | **Staff portal** (`/portal/`): Google sign-in, dashboard, leads, assignment, follow-ups and notes, team roles, partner bonds with printable QR codes, CSV export. |
+| `firestore.rules` | Who can see and change what (admin, marketing manager, credit officer). Tested in `tests/`. |
+| `public/config.js` | Contact numbers, partner bond names, lead prefix, repayment terms. |
+| `public/firebase-config.js` | Firebase web app settings. Empty = preview mode with sample data. |
+| `apps-script/Code.gs` | Optional backup copy of every lead into a DEED Google Sheet. |
+| `firebase.json`, `.github/workflows/` | Hosting settings and auto-deploy on every push. |
 
-No frameworks, no build step. The whole page is under 80 KB before compression.
+No frameworks and no build step. Firebase's code loads only when needed, so the landing page stays fast.
 
-## Go live checklist
+## Roles
 
-1. **Leads to Google Sheet**: follow [docs/GOOGLE_SHEET_SETUP.md](docs/GOOGLE_SHEET_SETUP.md), then paste the web app URL into `SHEET_ENDPOINT` in `public/config.js`.
-2. **Real contact details**: set `WHATSAPP_NUMBER`, `CALL_NUMBER`, `PARTNER_NAME` and `REPAYMENT_OPTIONS` in `public/config.js`.
-3. **Hosting**: follow [docs/FIREBASE_SETUP.md](docs/FIREBASE_SETUP.md). After that, every push to `main` goes live.
-4. **QR codes**: open `https://<your-site>/qr.html`, adjust the placements, print or download each as SVG.
-5. **Test**: scan one QR with a phone, submit the form, check the row in the Lead Tracker.
+- **Admin**: everything, plus adds staff and partner bonds.
+- **Marketing Manager**: sees all leads and assigns them to credit officers.
+- **Credit Officer**: sees only the leads assigned to them; calls, WhatsApps, logs attempts, updates status and follow-ups.
 
-Until `SHEET_ENDPOINT` is set the form runs in **demo mode**: it works but saves nothing, and says so.
+## Go live
+
+Follow [docs/GO_LIVE.md](docs/GO_LIVE.md). Everything is created in **DEED's Google account**, so DEED owns the data.
+Until then, open `/portal/` to preview it with sample data, and the landing page form runs in demo mode.
 
 ## QR source tracking
 
-Every QR points to the same page with a different source, for example:
+Every QR points to the same page with the partner bond and the placement, for example:
 
 ```
-https://<your-site>/?source=main_entrance
-https://<your-site>/?source=vehicle_sticker
-https://<your-site>/?source=salesperson_01
+https://<your-site>/?bond=banda_bond&source=main_entrance
+https://<your-site>/?bond=banda_bond&source=vehicle_sticker
+https://<your-site>/?bond=banda_bond&source=salesperson_01
 https://<your-site>/?source=facebook
 ```
 
-The page stores the source for the visit and sends it with the lead, so the customer never types it.
+Make and print them from the portal: **Partner bonds > QR codes**.
+
+The page stores the bond and source for the visit and sends them with the lead, so the customer never types it.
 People who arrive through the share button are tagged `shared`; anyone with no source is `direct`.
 
 ## Preview locally
 
 ```bash
 cd public && python3 -m http.server 8080
-# open http://localhost:8080/?source=test
+# landing page: http://localhost:8080/?bond=banda_bond&source=test
+# portal preview: http://localhost:8080/portal/
 ```
 
 ## Disclaimers on the page

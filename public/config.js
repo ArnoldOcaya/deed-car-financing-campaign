@@ -3,17 +3,25 @@
  * Everything marked TODO is a placeholder.
  */
 window.DEED_CONFIG = {
-  // Google Apps Script web app URL (see docs/GOOGLE_SHEET_SETUP.md).
-  // Leave empty to run in demo mode: the form works but nothing is saved.
+  // Leads are saved to Firebase (see firebase-config.js) for the staff portal.
+  // Optional backup copy to a Google Sheet: Apps Script web app URL (docs/GOOGLE_SHEET_SETUP.md).
+  // With neither set, the form runs in demo mode: it works but nothing is saved.
   SHEET_ENDPOINT: "",
 
   // TODO: DEED's real numbers. International format, digits only, no "+".
   WHATSAPP_NUMBER: "256700000000",
   CALL_NUMBER: "+256700000000",
 
-  // TODO: real names.
   BRAND_NAME: "DEED Microfinance",
-  PARTNER_NAME: "Partner Car Bond",
+
+  // Partner car bonds. The QR link says which one: ?bond=banda_bond
+  // Bonds added in the staff portal work automatically once Firebase is connected;
+  // this list is only the offline fallback for showing the name.
+  PARTNERS: { banda_bond: "Banda Bond" },
+  DEFAULT_PARTNER_NAME: "our partner car bonds",
+
+  // Lead reference prefix: VFC-2026-0001, VFC-2026-0002, ...
+  LEAD_PREFIX: "VFC-2026-",
 
   // Split shown in the calculator.
   CONTRIBUTION_PCT: 30,

@@ -1,0 +1,164 @@
+rules_version = '2';
+
+// DEED Vehicle Financing: who can do what.
+//
+//   Public (landing page)  -> can only CREATE a new lead, nothing else.
+//   Credit Officer         -> sees and updates only leads assigned to them.
+//   Marketing Manager      -> sees all leads, assigns them, updates progress.
+//   Admin                  -> everything, plus manages the team and partner bonds.
+//
+// Staff are documents in /staff/{email}. Only admins add them.
+// The very first admin is whoever signs in with an email in ownerEmails().
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // TODO: put the admin's Google sign-in email here (lowercase) before deploying.
+    function ownerEmails() {
+      return ['admin@example.com'];
+    }
+
+    function signedIn() {
+      return request.auth != null && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
+    }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function staffPath() { return /databases/$(database)/documents/staff/$(myEmail()); }
+    function me() { return get(staffPath()).data; }
+    function isStaff() { return signedIn() && exists(staffPath()) && me().active == true; }
+    function role() { return me().role; }
+    function isAdmin() { return isStaff() && role() == 'admin'; }
+    function isManager() { return isStaff() && (role() == 'manager' || role() == 'admin'); }
+    function isOfficerOf(lead) { return isStaff() && lead.assignedTo == myEmail(); }
+
+    function counterPath() { return /databases/$(database)/documents/counters/leads; }
+    function countBefore() { return exists(counterPath()) ? get(counterPath()).data.n : 0; }
+
+    function optStr(d, k, max) { return !(k in d) || d[k] == null || (d[k] is string && d[k].size() <= max); }
+    function optNum(d, k) { return !(k in d) || d[k] == null || (d[k] is number && d[k] >= 0 && d[k] < 10000000000000); }
+    function reqStr(d, k, min, max) { return k in d && d[k] is string && d[k].size() >= min && d[k].size() <= max; }
+
+    function customerKeys() {
+      return ['ref', 'seq', 'leadType', 'source', 'fullName', 'phone', 'altPhone', 'contactMethod',
+        'area', 'vehicle', 'vehicleMake', 'vehicleModel', 'vehicleYear', 'vehiclePrice', 'fromPartner',
+        'salesperson', 'canRaise', 'availableContribution', 'timeline', 'repaymentPeriod',
+        'incomeSource', 'wantsContact', 'contactTime', 'questions', 'consent', 'contributionPct',
+        'submissionId', 'pageUrl', 'referrer', 'landedAt', 'userAgent', 'createdAt', 'partnerId', 'partnerName'];
+    }
+    function workKeys() {
+      return ['status', 'lastContactAt', 'contactAttempts', 'nextFollowUp', 'loanAppStarted',
+        'loanAppRef', 'outcome', 'lostReason', 'updatedAt', 'updatedBy'];
+    }
+    function assignKeys() { return ['assignedTo', 'assignedName', 'assignedAt', 'assignedBy']; }
+
+    function validNewLead(d, leadId) {
+      return d.keys().hasOnly(customerKeys().concat(workKeys()).concat(assignKeys()))
+        && d.seq is int && d.seq == countBefore() + 1
+        && getAfter(counterPath()).data.n == d.seq
+        && getAfter(counterPath()).data.lastLead == leadId
+        && d.ref is string && d.ref.matches('^[A-Z]{2,5}-[0-9]{4}-0*' + string(d.seq) + '$')
+        && d.leadType in ['Application', 'Call-back request']
+        && reqStr(d, 'fullName', 2, 100)
+        && d.phone is string && d.phone.matches('^\\+2567[0-9]{8}$')
+        && d.consent == 'Yes'
+        && reqStr(d, 'source', 1, 60)
+        && d.createdAt == request.time
+        && d.status == 'New Lead' && d.outcome == 'Open'
+        && d.assignedTo == null && d.contactAttempts == 0
+        && optStr(d, 'altPhone', 20) && optStr(d, 'contactMethod', 20) && optStr(d, 'area', 80)
+        && optStr(d, 'vehicle', 100) && optStr(d, 'vehicleMake', 40) && optStr(d, 'vehicleModel', 40)
+        && optStr(d, 'vehicleYear', 4) && optNum(d, 'vehiclePrice') && optStr(d, 'fromPartner', 20)
+        && optStr(d, 'salesperson', 80) && optStr(d, 'canRaise', 40) && optNum(d, 'availableContribution')
+        && optStr(d, 'timeline', 40) && optStr(d, 'repaymentPeriod', 40) && optStr(d, 'incomeSource', 40)
+        && optStr(d, 'wantsContact', 5) && optStr(d, 'contactTime', 20) && optStr(d, 'questions', 1000)
+        && optStr(d, 'submissionId', 64) && optStr(d, 'pageUrl', 500) && optStr(d, 'referrer', 500)
+        && optStr(d, 'landedAt', 40) && optStr(d, 'userAgent', 250)
+        && optStr(d, 'partnerId', 60) && optStr(d, 'partnerName', 80)
+        && (d.leadType != 'Application' || (reqStr(d, 'vehicle', 1, 100) && d.vehiclePrice is number && d.vehiclePrice > 0));
+    }
+
+    // ---- Lead counter (gives sequential IDs like VFC-2026-0001) ----
+    match /counters/leads {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['n', 'lastLead'])
+        && request.resource.data.n == 1
+        && existsAfter(/databases/$(database)/documents/leads/$(request.resource.data.lastLead));
+      allow update: if request.resource.data.keys().hasOnly(['n', 'lastLead'])
+        && request.resource.data.n == resource.data.n + 1
+        && existsAfter(/databases/$(database)/documents/leads/$(request.resource.data.lastLead))
+        && !exists(/databases/$(database)/documents/leads/$(request.resource.data.lastLead));
+    }
+
+    // ---- Leads ----
+    match /leads/{leadId} {
+      allow create: if validNewLead(request.resource.data, leadId);
+
+      allow get: if isManager() || isOfficerOf(resource.data);
+      allow list: if isManager() || (isStaff() && resource.data.assignedTo == myEmail());
+
+      // Managers/admins: assign and update progress. Customer answers are never edited.
+      allow update: if isManager()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(workKeys().concat(assignKeys()))
+        && validAssignment()
+        && request.resource.data.updatedBy == myEmail();
+
+      // Officers: update progress on their own leads only. They cannot reassign.
+      allow update: if isOfficerOf(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(workKeys())
+        && request.resource.data.updatedBy == myEmail();
+
+      allow delete: if isAdmin();
+
+      function validAssignment() {
+        return !('assignedTo' in request.resource.data.diff(resource.data).affectedKeys())
+          || request.resource.data.assignedTo == null
+          || (exists(/databases/$(database)/documents/staff/$(request.resource.data.assignedTo))
+              && request.resource.data.assignedBy == myEmail());
+      }
+
+      // Contact history / notes
+      match /activity/{activityId} {
+        function parent() { return get(/databases/$(database)/documents/leads/$(leadId)).data; }
+        allow read: if isManager() || isOfficerOf(parent());
+        allow create: if (isManager() || isOfficerOf(parent()))
+          && request.resource.data.keys().hasOnly(['type', 'text', 'by', 'byName', 'at'])
+          && request.resource.data.by == myEmail()
+          && request.resource.data.at == request.time
+          && request.resource.data.type in ['note', 'call', 'whatsapp', 'status', 'assign', 'followup']
+          && request.resource.data.text is string && request.resource.data.text.size() <= 2000;
+        allow update, delete: if false;
+      }
+    }
+
+    // ---- Partner car bonds (e.g. Banda Bond). Public can read names; only admins change them. ----
+    match /partners/{partnerId} {
+      allow read: if true;
+      allow write: if isAdmin()
+        && (request.resource == null || (
+             request.resource.data.keys().hasOnly(['name', 'location', 'contactName', 'contactPhone', 'active', 'addedBy', 'addedAt'])
+             && reqStr(request.resource.data, 'name', 2, 80)
+             && partnerId.matches('^[a-z0-9_-]{2,60}$')));
+    }
+
+    // ---- Team ----
+    match /staff/{email} {
+      allow read: if isStaff() || (signedIn() && email == myEmail());
+      allow write: if isAdmin()
+        && (request.resource == null || (
+             request.resource.data.keys().hasOnly(['name', 'role', 'active', 'addedBy', 'addedAt', 'phone'])
+             && request.resource.data.role in ['admin', 'manager', 'officer']
+             && email == email.lower()))
+        // An admin can't remove or demote themselves (avoids locking everyone out).
+        && (email != myEmail() || (request.resource != null && request.resource.data.role == 'admin' && request.resource.data.active == true));
+      // Bootstrap: the owner creates their own admin record on first sign-in.
+      allow create: if signedIn() && email == myEmail() && myEmail() in ownerEmails()
+        && request.resource.data.role == 'admin' && request.resource.data.active == true
+        && request.resource.data.keys().hasOnly(['name', 'role', 'active', 'addedBy', 'addedAt', 'phone']);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

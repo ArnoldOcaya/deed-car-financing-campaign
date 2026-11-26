@@ -1,7 +1,10 @@
-# Send leads into a Google Sheet
+# Optional: backup copy of leads in a Google Sheet
 
-Every application and call-back request from the page is written to a Google Sheet by a small
-Google Apps Script (free, runs on Google's servers). The script is in `apps-script/Code.gs`.
+The staff portal is where leads are worked. If DEED also wants a spreadsheet copy of every submission,
+this small Google Apps Script (free) writes each one into a Google Sheet with the same lead ID as the portal.
+If Firebase isn't set up, the Sheet works on its own as the lead tracker. The script is in `apps-script/Code.gs`.
+
+Do this **signed in to DEED's Google account** so the Sheet belongs to DEED.
 
 It creates:
 
@@ -14,7 +17,7 @@ It creates:
 
 ## Setup (about 10 minutes)
 
-1. Create a new Google Sheet in DEED's Google account: <https://sheets.new>
+1. Signed in as DEED, create a new Google Sheet: <https://sheets.new>
 2. Menu **Extensions > Apps Script**. Delete what's there and paste the full contents of `apps-script/Code.gs`.
 3. Optional: at the top, set `NOTIFY_EMAILS` to the coordinator's email to get an email for every new lead.
 4. Click **Save**, choose `setup` in the function dropdown, click **Run**. Approve the permissions

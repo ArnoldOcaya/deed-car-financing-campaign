@@ -3,7 +3,7 @@ name: Deploy to Firebase Hosting
 # Runs on every push to main once these are set in
 # GitHub > Settings > Secrets and variables > Actions:
 #   Variables tab: FIREBASE_PROJECT_ID  (e.g. deed-car-financing)
-#   Secrets tab:   FIREBASE_SERVICE_ACCOUNT  (JSON key, see docs/FIREBASE_SETUP.md)
+#   Secrets tab:   FIREBASE_SERVICE_ACCOUNT  (JSON key, see docs/GO_LIVE.md)
 # Until then the job is skipped, so you won't see failures.
 
 on:
@@ -20,6 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Deploy database security rules
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+        run: |
+          printf '%s' "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json"
+          npx -y firebase-tools@13 deploy --only firestore:rules --project "$PROJECT_ID" --non-interactive
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

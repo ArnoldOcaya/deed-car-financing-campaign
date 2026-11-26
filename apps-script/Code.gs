@@ -22,7 +22,7 @@ var RAW_HEADERS = [
   'Buying From Partner', 'Car Bond / Salesperson', 'Can Raise 30%', 'Available Contribution (UGX)',
   'Purchase Timeline', 'Repayment Period', 'Income Source', 'Wants Officer Contact',
   'Preferred Contact Time', 'Questions', 'Consent', 'Submission ID', 'Page URL', 'Referrer',
-  'Landed At', 'Client Time', 'User Agent'
+  'Landed At', 'Client Time', 'User Agent', 'Partner Bond'
 ];
 
 // Columns A–W follow the campaign plan; X–Z are extras for officers.
@@ -68,7 +68,8 @@ function doPost(e) {
 
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       ensureSheets_(ss);
-      var leadId = nextLeadId_();
+      // When the portal (Firebase) already gave a reference, reuse it so both records match.
+      var leadId = /^[A-Z]{2,5}-\d{4}-\d+$/.test(String(data.lead_ref || '')) ? String(data.lead_ref) : nextLeadId_();
       var now = new Date();
 
       appendRaw_(ss, leadId, now, data);
@@ -168,7 +169,8 @@ function appendRaw_(ss, id, now, d) {
     txt_(d.can_raise), d.available_contribution === 0 ? 0 : num_(d.available_contribution),
     txt_(d.timeline), txt_(d.repayment_period), txt_(d.income_source), txt_(d.wants_contact),
     txt_(d.contact_time), txt_(d.questions), txt_(d.consent), txt_(d.submission_id), txt_(d.page_url),
-    txt_(d.referrer), txt_(d.landed_at), txt_(d.submitted_at_client), txt_(d.user_agent)
+    txt_(d.referrer), txt_(d.landed_at), txt_(d.submitted_at_client), txt_(d.user_agent),
+    txt_(d.partner_name || d.partner_id)
   ]);
 }
 
@@ -183,7 +185,7 @@ function appendTracker_(ss, id, now, d) {
     '=IF(H' + r + '="","",H' + r + '*' + pct + ')',
     '=IF(H' + r + '="","",H' + r + '*' + (1 - pct) + ')',
     d.available_contribution === 0 ? 0 : num_(d.available_contribution),
-    txt_([d.source, d.salesperson].filter(String).join(' / ')),
+    txt_([d.partner_name || d.partner_id, d.source, d.salesperson].filter(String).join(' / ')),
     txt_(d.contact_method), '', 'New Lead', '', 0, '', '', 'No', '', 'Open', '',
     txt_(d.lead_type), txt_(d.contact_time),
     waNum ? '=HYPERLINK("https://wa.me/' + waNum + '","WhatsApp")' : ''

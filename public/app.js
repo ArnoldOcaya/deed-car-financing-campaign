@@ -40,12 +40,43 @@
   var rawSource = params.get("source") || params.get("utm_source") || store("deed_source") || "direct";
   var SOURCE = String(rawSource).toLowerCase().replace(/[^a-z0-9_\-]/g, "").slice(0, 60) || "direct";
   store("deed_source", SOURCE);
+  var rawBond = params.get("bond") || store("deed_bond") || "";
+  var BOND = String(rawBond).toLowerCase().replace(/[^a-z0-9_\-]/g, "").slice(0, 60);
+  if (BOND) store("deed_bond", BOND);
+  var PARTNERS = cfg.PARTNERS || {};
+  var bondName = BOND ? (PARTNERS[BOND] || "") : "";
   var LANDED_AT = store("deed_landed") || new Date().toISOString();
   store("deed_landed", LANDED_AT);
 
   /* ---------- config into page ---------- */
   $$("[data-brand]").forEach(function (el) { if (cfg.BRAND_NAME) el.textContent = cfg.BRAND_NAME; });
-  $$("[data-partner]").forEach(function (el) { if (cfg.PARTNER_NAME) el.textContent = cfg.PARTNER_NAME; });
+  function showPartner() {
+    var name = bondName || cfg.DEFAULT_PARTNER_NAME || "our partner car bonds";
+    $$("[data-partner]").forEach(function (el) { el.textContent = name; });
+    $$("[data-partner-head]").forEach(function (el) { el.hidden = !bondName; });
+  }
+  showPartner();
+
+  /* ---------- Firebase (lazy-loaded only when needed) ---------- */
+  var FB = window.DEED_FIREBASE || {};
+  var FB_ON = !!(FB.projectId && FB.apiKey);
+  var SDK = "https://www.gstatic.com/firebasejs/10.14.1/";
+  var dbPromise = null;
+  function getDb() {
+    if (!dbPromise) {
+      dbPromise = Promise.all([import(SDK + "firebase-app.js"), import(SDK + "firebase-firestore-lite.js")]).then(function (m) {
+        return { F: m[1], db: m[1].getFirestore(m[0].initializeApp(FB)) };
+      });
+      dbPromise.catch(function () { dbPromise = null; });
+    }
+    return dbPromise;
+  }
+  // A bond added in the portal: look up its name.
+  if (FB_ON && BOND && !PARTNERS[BOND]) {
+    getDb().then(function (x) { return x.F.getDoc(x.F.doc(x.db, "partners", BOND)); })
+      .then(function (snap) { if (snap.exists() && snap.data().name) { bondName = snap.data().name; showPartner(); } })
+      .catch(function () {});
+  }
   $$("[data-pct-you]").forEach(function (el) { el.textContent = PCT; });
   $$("[data-pct-deed]").forEach(function (el) { el.textContent = 100 - PCT; });
 
@@ -216,6 +247,8 @@
     return {
       lead_type: type,
       source: SOURCE,
+      partner_id: BOND,
+      partner_name: bondName,
       submission_id: uid(),
       page_url: location.href.split("#")[0],
       referrer: document.referrer || "",
@@ -227,7 +260,63 @@
 
   function ServerError(msg) { this.message = msg; this.server = true; }
 
+  function clean(o) {
+    var out = {};
+    Object.keys(o).forEach(function (k) { if (o[k] !== undefined && o[k] !== null && o[k] !== "") out[k] = o[k]; });
+    return out;
+  }
+
+  // Save to Firestore with a sequential reference (VFC-2026-0001) for the staff portal.
+  function saveToFirebase(p) {
+    return getDb().then(function (x) {
+      var F = x.F, db = x.db;
+      var lead = clean({
+        leadType: p.lead_type, source: p.source, partnerId: p.partner_id, partnerName: p.partner_name,
+        fullName: p.full_name, phone: p.phone, altPhone: p.alt_phone, contactMethod: p.contact_method, area: p.area,
+        vehicle: p.vehicle, vehicleMake: p.vehicle_make, vehicleModel: p.vehicle_model, vehicleYear: p.vehicle_year,
+        vehiclePrice: p.vehicle_price || undefined, fromPartner: p.from_partner, salesperson: p.salesperson, canRaise: p.can_raise,
+        availableContribution: typeof p.available_contribution === "number" ? p.available_contribution : undefined,
+        timeline: p.timeline, repaymentPeriod: p.repayment_period, incomeSource: p.income_source, wantsContact: p.wants_contact,
+        contactTime: p.contact_time, questions: p.questions, consent: p.consent, contributionPct: p.contribution_pct,
+        submissionId: p.submission_id, pageUrl: (p.page_url || "").slice(0, 500), referrer: (p.referrer || "").slice(0, 500),
+        landedAt: p.landed_at, userAgent: p.user_agent
+      });
+      lead.status = "New Lead"; lead.outcome = "Open"; lead.assignedTo = null; lead.contactAttempts = 0;
+      var prefix = cfg.LEAD_PREFIX || "VFC-2026-";
+      return F.runTransaction(db, function (tx) {
+        var cref = F.doc(db, "counters", "leads");
+        return tx.get(cref).then(function (snap) {
+          var n = (snap.exists() ? snap.data().n : 0) + 1;
+          var lref = F.doc(F.collection(db, "leads"));
+          var ref = prefix + String(n).padStart(4, "0");
+          tx.set(lref, Object.assign({}, lead, { seq: n, ref: ref, createdAt: F.serverTimestamp() }));
+          tx.set(cref, { n: n, lastLead: lref.id });
+          return ref;
+        });
+      });
+    });
+  }
+
   function send(payload) {
+    if (FB_ON) {
+      return saveToFirebase(payload).then(function (ref) {
+        // Backup copy to the DEED Google Sheet, best effort.
+        if (cfg.SHEET_ENDPOINT) {
+          fetch(cfg.SHEET_ENDPOINT, { method: "POST", mode: "no-cors", keepalive: true, headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(Object.assign({}, payload, { lead_ref: ref })) }).catch(function () {});
+        }
+        return { ok: true, lead_id: ref };
+      }, function (err) {
+        console.error("[DEED] Firebase save failed", err);
+        if (cfg.SHEET_ENDPOINT) return sendToSheet(payload);
+        if (err && err.code === "permission-denied") throw new ServerError("some details were not accepted");
+        throw err;
+      });
+    }
+    return sendToSheet(payload);
+  }
+
+  function sendToSheet(payload) {
     var url = cfg.SHEET_ENDPOINT;
     var body = JSON.stringify(payload);
     if (!url) {
@@ -325,7 +414,7 @@
   });
 
   /* ---------- share ---------- */
-  var shareUrl = location.origin + location.pathname + "?source=shared";
+  var shareUrl = location.origin + location.pathname + "?source=shared" + (BOND ? "&bond=" + encodeURIComponent(BOND) : "");
   $$("[data-share]").forEach(function (b) {
     b.addEventListener("click", function () {
       var data = { title: "Drive Your Dream. Pay 30%.", text: "Put down 30% and let DEED Microfinance help finance the rest (subject to approval).", url: shareUrl };
