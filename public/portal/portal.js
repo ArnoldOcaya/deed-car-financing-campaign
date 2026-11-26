@@ -1,4 +1,4 @@
-import { createBackend, ROLES, STATUSES, OUTCOMES, LOST_REASONS } from "./data.js";
+import { createBackend, ROLES, ROLE_INFO, STATUSES, OUTCOMES, LOST_REASONS, normalizeUgPhone } from "./data.js";
 
 const site = window.DEED_CONFIG || {};
 const PCT = Number(site.CONTRIBUTION_PCT) || 30;
@@ -89,7 +89,10 @@ const S = {
 };
 const isManager = () => S.me && (S.me.role === "admin" || S.me.role === "manager");
 const isAdmin = () => S.me && S.me.role === "admin";
-const officers = () => S.staff.filter((s) => s.active !== false && (s.role === "officer" || s.role === "manager" || s.role === "admin")).sort((a, b) => (a.role === "officer" ? -1 : 1) - (b.role === "officer" ? -1 : 1) || a.name.localeCompare(b.name));
+// Director, marketing team and admin see every lead; only admin and marketing managers assign.
+const canViewAll = () => S.me && S.me.role !== "officer";
+const canEditLead = (l) => isManager() || (S.me && l.assignedTo === S.me.email);
+const officers = () => S.staff.filter((s) => s.active !== false && (s.role === "officer" || s.role === "manager")).sort((a, b) => (a.role === "officer" ? -1 : 1) - (b.role === "officer" ? -1 : 1) || a.name.localeCompare(b.name));
 const staffName = (email) => (S.staff.find((s) => s.email === email) || {}).name || email || "Unassigned";
 const partnerName = (l) => l.partnerName || (S.partners.find((p) => p.id === l.partnerId) || {}).name || "";
 
@@ -146,7 +149,9 @@ function renderLogin(errMsg) {
         ${errMsg ? `<p class="login-err">${esc(errMsg)}</p>` : ""}
         ${demo ? `<div class="demo-box"><strong>Preview mode</strong><span class="muted">Firebase isn't connected yet, so this uses sample data. Pick a role to see what each person sees.</span>
           <button class="btn" data-demo="arnold@deed.example">${icon("user")} Admin (Arnold)</button>
+          <button class="btn" data-demo="director@deed.example">${icon("trend")} Director</button>
           <button class="btn" data-demo="grace@deed.example">${icon("users")} Marketing Manager</button>
+          <button class="btn" data-demo="brenda@deed.example">${icon("chat")} Marketing Officer</button>
           <button class="btn" data-demo="peter@deed.example">${icon("car")} Credit Officer</button></div>` : ""}
       </div>
     </div>
@@ -190,7 +195,7 @@ function navItems() {
   const mine = S.leads.filter((l) => followState(l) === "overdue" || followState(l) === "today").length;
   const items = [
     { r: "dashboard", label: "Dashboard", ic: "home" },
-    { r: "leads", label: "Leads", ic: "list", count: isManager() ? unassigned : mine }
+    { r: "leads", label: "Leads", ic: "list", count: canViewAll() ? unassigned : mine }
   ];
   if (isAdmin()) items.push({ r: "partners", label: "Partner bonds", ic: "building" }, { r: "team", label: "Team", ic: "users" });
   return items;
@@ -214,6 +219,7 @@ function render() {
     </aside>
     <div class="main">
       ${demoBar}
+      ${!S.me.phone && isAdmin() ? `<div class="demo-banner" style="background:var(--red-50);color:var(--red);border-color:#f6c9cb">${icon("phone")}<span><b>Add your phone number.</b> Every team member needs one on the system.</span><button class="btn btn-sm btn-red" id="add-my-phone">Add phone</button></div>` : ""}
       <header class="topbar">
         <img class="mlogo" src="../img/deed-emblem.png" alt="">
         <h1>${titles[S.route]}</h1>
@@ -234,6 +240,8 @@ function render() {
 
 function bindShell() {
   document.getElementById("me-chip").onclick = () => { if (confirmBox("Sign out of the DEED portal?")) S.be.signOut(); };
+  const myPhone = document.getElementById("add-my-phone");
+  if (myPhone) myPhone.onclick = () => personModal(S.staff.find((x) => x.email === S.me.email) || { email: S.me.email, name: S.me.name, role: S.me.role, active: true }, true);
   const dr = document.getElementById("demo-role");
   if (dr) dr.onchange = () => { S.be.signOut().then(() => S.be.signIn(dr.value)); };
   if (S.route === "leads") bindLeads();
@@ -266,7 +274,7 @@ function viewDashboard() {
   const first = String(S.me.name).split(" ")[0];
 
   const kpi = (label, value, sub, cls = "", go = "", chip = "") => `<div class="card kpi ${cls}" ${go ? `data-go="${go}" data-chip="${chip}" style="cursor:pointer"` : ""}><div class="k-label">${label}</div><div class="k-value num">${value}</div>${sub ? `<div class="k-sub">${sub}</div>` : ""}</div>`;
-  const kpis = isManager() ? [
+  const kpis = canViewAll() ? [
     kpi("Total leads", total, `${newLeads} new`, "accent", "leads", "all"),
     kpi("Unassigned", unassigned, "Need an officer", unassigned ? "alert" : "", "leads", "unassigned"),
     kpi("Overdue follow-ups", overdue, `${today} due today`, overdue ? "alert" : "", "leads", "overdue"),
@@ -313,14 +321,14 @@ function viewDashboard() {
       <div class="lc-meta"><span>${esc(l.vehicle || l.leadType)}</span>${l.vehiclePrice ? `<span>UGX ${short(l.vehiclePrice)}</span>` : ""}<span>${esc(partnerName(l) || l.source)}</span><span>${ago(l.createdAt)}</span></div></a>`).join("");
 
   return `
-  <div class="page-head"><div><h2>${greet}, ${esc(first)}</h2><p>${isManager() ? "Here's how the campaign is doing." : "Here are your leads and follow-ups."}</p></div>
-    <div class="actions"><button class="btn btn-primary" data-go="leads" data-chip="${isManager() ? "unassigned" : "new"}">${icon("list")} ${isManager() ? "Assign leads" : "Start calling"}</button></div></div>
+  <div class="page-head"><div><h2>${greet}, ${esc(first)}</h2><p>${canViewAll() ? "Here's how the campaign is doing." : "Here are your leads and follow-ups."}</p></div>
+    <div class="actions"><button class="btn btn-primary" data-go="leads" data-chip="${isManager() ? "unassigned" : canViewAll() ? "all" : "new"}">${icon("list")} ${isManager() ? "Assign leads" : canViewAll() ? "View leads" : "Start calling"}</button></div></div>
   <div class="kpis">${kpis.join("")}</div>
   <div class="grid-2">
     <div class="card"><div class="card-head"><h3>Lead pipeline</h3><span class="muted">${total} leads</span></div><div class="funnel">${funnel}</div></div>
     <div class="card"><div class="card-head"><h3>Leads per day</h3><span class="muted">Last 14 days</span></div><div class="spark">${spark}</div></div>
   </div>
-  ${isManager() ? `<div class="grid-2 even">${gTable("By partner bond", group(partnerName), "Bond")}${gTable("By QR source", group((l) => l.source), "Source")}</div>
+  ${canViewAll() ? `<div class="grid-2 even">${gTable("By partner bond", group(partnerName), "Bond")}${gTable("By QR source", group((l) => l.source), "Source")}</div>
   <div class="grid-2 even">${gTable("By officer", group((l) => l.assignedTo ? staffName(l.assignedTo) : "Unassigned"), "Officer")}
     <div class="card"><div class="card-head"><h3>Latest leads</h3><a href="#/leads" class="btn btn-sm btn-ghost">View all</a></div><div class="lead-cards">${recent || `<div class="empty">No leads yet. Share the QR codes!</div>`}</div></div></div>`
   : `<div class="card"><div class="card-head"><h3>Latest leads</h3><a href="#/leads" class="btn btn-sm btn-ghost">View all</a></div><div class="lead-cards">${recent || `<div class="empty">No leads assigned to you yet.</div>`}</div></div>`}`;
@@ -332,7 +340,7 @@ function viewDashboard() {
 function chipDefs() {
   const L = S.leads;
   const defs = [["all", "All", () => true]];
-  if (isManager()) defs.push(["unassigned", "Unassigned", (l) => !l.assignedTo && l.outcome === "Open"]);
+  if (canViewAll()) defs.push(["unassigned", "Unassigned", (l) => !l.assignedTo && l.outcome === "Open"]);
   defs.push(["new", "New", (l) => l.status === "New Lead"], ["today", "Due today", (l) => followState(l) === "today"],
     ["overdue", "Overdue", (l) => followState(l) === "overdue"], ["hot", "Interested", (l) => INTERESTED.has(l.status) && l.outcome === "Open"],
     ["callback", "Call-backs", (l) => l.leadType === "Call-back request"], ["closed", "Closed", (l) => l.outcome !== "Open"]);
@@ -375,14 +383,14 @@ function viewLeads() {
       <div class="lc-meta"><span>${l.assignedTo ? esc(staffName(l.assignedTo)) : "<b style='color:var(--red)'>Unassigned</b>"}</span><span>${esc(partnerName(l) || l.source)}</span>${l.nextFollowUp ? `<span>Follow-up ${followCell(l)}</span>` : ""}<span>${ago(l.createdAt)}</span></div></div>`).join("")}</div>`;
 
   return `
-  <div class="page-head"><div><h2>${isManager() ? "All leads" : "My leads"}</h2><p>${rows.length} of ${S.leads.length} shown</p></div>
-    <div class="actions">${isManager() ? `<button class="btn" id="export">${icon("dl")} Export CSV</button>` : ""}</div></div>
+  <div class="page-head"><div><h2>${canViewAll() ? "All leads" : "My leads"}</h2><p>${rows.length} of ${S.leads.length} shown</p></div>
+    <div class="actions">${canViewAll() ? `<button class="btn" id="export">${icon("dl")} Export CSV</button>` : ""}</div></div>
   <div class="card">
     <div class="chips" role="tablist">${chipDefs().map((c) => `<button class="chip ${f.chip === c.k ? "active" : ""}" data-chip="${c.k}" role="tab" aria-selected="${f.chip === c.k}">${c.label}<b>${c.n}</b></button>`).join("")}</div>
     <div class="toolbar">
       <div class="search">${icon("search")}<input class="input" id="q" type="search" placeholder="Search name, phone, vehicle, ref" value="${esc(f.q)}" autocomplete="off"></div>
       <select class="input" id="f-status" aria-label="Status"><option value="">All statuses</option>${STATUSES.map((s) => opt(s, s, f.status)).join("")}</select>
-      ${isManager() ? `<select class="input" id="f-officer" aria-label="Officer"><option value="">All officers</option>${opt("_none", "Unassigned", f.officer)}${officers().map((o) => opt(o.email, o.name, f.officer)).join("")}</select>` : ""}
+      ${canViewAll() ? `<select class="input" id="f-officer" aria-label="Officer"><option value="">All officers</option>${opt("_none", "Unassigned", f.officer)}${officers().map((o) => opt(o.email, o.name, f.officer)).join("")}</select>` : ""}
       <select class="input" id="f-partner" aria-label="Partner bond"><option value="">All bonds</option>${S.partners.map((p) => opt(p.id, p.name, f.partner)).join("")}</select>
       <select class="input" id="f-source" aria-label="Source"><option value="">All sources</option>${sources.map((s) => opt(s, s, f.source)).join("")}</select>
     </div>
@@ -476,9 +484,10 @@ function drawLead() {
   drawerRoot.dataset.lead = l.id;
   const price = l.vehiclePrice || 0, need = price * PCT / 100, have = l.availableContribution || 0;
   const ratio = need ? Math.min(have / need, 1) : 0;
-  const waText = `Hello ${String(l.fullName).split(" ")[0]}, thank you for your interest in vehicle financing through DEED Microfinance.\n\nWe received your inquiry${l.vehicle ? " regarding the " + l.vehicle : ""} and would be glad to guide you through the financing process.\n\nUnder our vehicle financing arrangement, you may contribute ${PCT}% of the vehicle price while DEED Microfinance finances up to ${100 - PCT}%, subject to assessment and approval.\n\nWhen would be a convenient time for us to discuss your application?\n\nThank you,\n${S.me.name}\nDEED Microfinance`;
+  const waText = `Hello ${String(l.fullName).split(" ")[0]}, thank you for your interest in vehicle financing through DEED Microfinance.\n\nWe received your inquiry${l.vehicle ? " regarding the " + l.vehicle : ""} and would be glad to guide you through the financing process.\n\nUnder our vehicle financing arrangement, you may contribute ${PCT}% of the vehicle price while DEED Microfinance finances up to ${100 - PCT}%, subject to assessment and approval.\n\nWhen would be a convenient time for us to discuss your application?\n\nThank you,\n${S.me.name}${S.me.phone ? " (" + S.me.phone + ")" : ""}\nDEED Microfinance`;
   const opt = (v, cur, label) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(label || v)}</option>`;
   const kv = (k, v) => v || v === 0 ? `<div><small>${k}</small><span>${esc(v)}</span></div>` : "";
+  const editable = canEditLead(l);
 
   drawerRoot.innerHTML = `
   <div class="scrim" data-close></div>
@@ -493,7 +502,7 @@ function drawLead() {
       <div class="quick">
         <a class="btn btn-primary" href="tel:${esc(l.phone)}" id="q-call">${icon("phone")} Call</a>
         <a class="btn btn-green" href="https://wa.me/${waDigits(l.phone)}?text=${encodeURIComponent(waText)}" target="_blank" rel="noopener" id="q-wa">${icon("chat")} WhatsApp</a>
-        <button class="btn" id="q-attempt">${icon("check")} Log attempt</button>
+        ${editable ? `<button class="btn" id="q-attempt">${icon("check")} Log attempt</button>` : `<span class="btn" style="cursor:default" title="View only">${icon("user")} ${esc(l.assignedTo ? staffName(l.assignedTo).split(" ")[0] : "Unassigned")}</span>`}
       </div>
     </div>
     <div class="drawer-body">
@@ -502,8 +511,8 @@ function drawLead() {
         <button class="btn btn-primary" id="d-assign-go">Assign</button></div>
         ${l.assignedTo ? `<p class="muted" style="margin:8px 0 0">Assigned to <b>${esc(staffName(l.assignedTo))}</b>${l.assignedAt ? " · " + fmtDateTime(l.assignedAt) : ""}</p>` : ""}</div>` : ""}
 
-      <div class="card card-pad section" id="progress"><h3>Progress</h3>
-        <div class="form-grid">
+      <div class="card card-pad section" id="progress"><h3>Progress${editable ? "" : ` <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">· view only</span>`}</h3>
+        <fieldset ${editable ? "" : "disabled"} style="border:0;padding:0;margin:0;min-width:0"><div class="form-grid">
           <div class="full"><label class="lbl" for="d-status">Lead status</label><select class="input" id="d-status">${STATUSES.map((s) => opt(s, l.status)).join("")}</select></div>
           <div><label class="lbl" for="d-follow">Next follow-up</label><input class="input" type="date" id="d-follow" value="${isoDate(l.nextFollowUp)}"></div>
           <div><label class="lbl">Contact attempts</label><div class="input num" style="display:flex;align-items:center">${l.contactAttempts || 0}${l.lastContactAt ? `<span class="muted" style="margin-left:auto;font-size:12px">last ${fmtDate(l.lastContactAt)}</span>` : ""}</div></div>
@@ -511,8 +520,8 @@ function drawLead() {
           <div><label class="lbl" for="d-appref">Application reference</label><input class="input" id="d-appref" value="${esc(l.loanAppRef || "")}" maxlength="60"></div>
           <div><label class="lbl" for="d-outcome">Final outcome</label><select class="input" id="d-outcome">${OUTCOMES.map((o) => opt(o, l.outcome || "Open")).join("")}</select></div>
           <div><label class="lbl" for="d-lost">Closed / lost reason</label><select class="input" id="d-lost"><option value="">—</option>${LOST_REASONS.map((o) => opt(o, l.lostReason)).join("")}</select></div>
-        </div>
-        <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-red" id="d-save">Save progress</button></div>
+        </div></fieldset>
+        ${editable ? `<div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn btn-red" id="d-save">Save progress</button></div>` : ""}
       </div>
 
       ${price ? `<div class="card card-pad section"><h3>Financing</h3>
@@ -528,7 +537,7 @@ function drawLead() {
       </div>${l.questions ? `<div style="margin-top:12px;padding:10px 12px;background:var(--bg);border-radius:10px"><small class="muted" style="font-weight:600">QUESTION FROM CUSTOMER</small><p style="margin:4px 0 0">${esc(l.questions)}</p></div>` : ""}</div>
 
       <div class="card card-pad section"><h3>Notes & activity</h3>
-        <div class="note-box"><textarea class="input" id="d-note" placeholder="Add a note (what was discussed, next step)" maxlength="2000"></textarea><button class="btn btn-primary" id="d-note-go">Add</button></div>
+        ${editable ? `<div class="note-box"><textarea class="input" id="d-note" placeholder="Add a note (what was discussed, next step)" maxlength="2000"></textarea><button class="btn btn-primary" id="d-note-go">Add</button></div>` : ""}
         <div class="timeline" id="timeline">${timelineHtml()}</div></div>
 
       ${isAdmin() ? `<div style="text-align:center"><button class="btn btn-ghost btn-sm" id="d-delete" style="color:var(--red)">Delete lead</button></div>` : ""}
@@ -546,6 +555,7 @@ function bindDrawer(l) {
   prog.addEventListener("change", () => (prog.dataset.dirty = "1"));
   const logContact = (type, text) => S.be.updateLead(l.id, { contactAttempts: (l.contactAttempts || 0) + 1, lastContactAt: new Date(),
     ...(l.status === "New Lead" ? { status: "Contact Attempted" } : {}) }, { type, text }).catch(fail);
+  if (!canEditLead(l)) return;
   document.getElementById("q-call").addEventListener("click", () => logContact("call", "Called customer"));
   document.getElementById("q-wa").addEventListener("click", () => logContact("whatsapp", "Sent WhatsApp message"));
   document.getElementById("q-attempt").onclick = async () => {
@@ -597,46 +607,63 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (moda
 /* Team (admin)                                                        */
 /* ------------------------------------------------------------------ */
 function viewTeam() {
-  const order = { admin: 0, manager: 1, officer: 2 };
-  const people = [...S.staff].sort((a, b) => order[a.role] - order[b.role] || String(a.name).localeCompare(b.name));
+  const order = { admin: 0, director: 1, manager: 2, marketing: 3, officer: 4 };
+  const people = [...S.staff].sort((a, b) => (order[a.role] ?? 9) - (order[b.role] ?? 9) || String(a.name).localeCompare(b.name));
   const load = (email) => S.leads.filter((l) => l.assignedTo === email && l.outcome === "Open").length;
-  const group = (role) => people.filter((p) => p.role === role);
-  const block = (role, desc) => `<div class="card" style="margin-bottom:16px"><div class="card-head"><h3>${ROLES[role]}s <span class="muted" style="font-weight:500">· ${desc}</span></h3><span class="muted">${group(role).length}</span></div>
-    <div class="people">${group(role).map((p) => `<div class="person ${p.active === false ? "inactive" : ""}">
+  const group = (roles) => people.filter((p) => roles.includes(p.role));
+  const missingPhone = people.filter((p) => !p.phone).length;
+  const row = (p) => `<div class="person ${p.active === false ? "inactive" : ""}">
       <span class="avatar">${esc(initials(p.name))}</span>
-      <div style="min-width:0"><div class="p-name">${esc(p.name)} ${p.email === S.me.email ? '<span class="muted">(you)</span>' : ""}</div><div class="p-sub">${esc(p.email)}${p.phone ? " · " + esc(p.phone) : ""}${role !== "admin" ? ` · ${load(p.email)} open leads` : ""}${p.active === false ? " · deactivated" : ""}</div></div>
-      <div class="p-act"><span class="role-badge role-${p.role}">${ROLES[p.role]}</span>${p.email !== S.me.email ? `<button class="btn btn-sm" data-edit="${esc(p.email)}">Edit</button>` : ""}</div>
-    </div>`).join("") || `<div class="empty">None yet</div>`}</div></div>`;
-  return `<div class="page-head"><div><h2>Team</h2><p>Add the people who can sign in and choose what they can do.</p></div>
+      <div style="min-width:0"><div class="p-name">${esc(p.name)} ${p.email === S.me.email ? '<span class="muted">(you)</span>' : ""}</div>
+        <div class="p-sub">${p.phone ? `<a href="tel:${esc(p.phone)}" style="color:inherit">${esc(p.phone)}</a>` : `<b style="color:var(--red)">No phone number</b>`} · ${esc(p.email)}${["officer", "manager"].includes(p.role) ? ` · ${load(p.email)} open leads` : ""}${p.active === false ? " · deactivated" : ""}</div></div>
+      <div class="p-act"><span class="role-badge role-${p.role}">${ROLES[p.role] || p.role}</span><button class="btn btn-sm" data-edit="${esc(p.email)}">Edit</button></div>
+    </div>`;
+  const block = (title, desc, roles) => `<div class="card" style="margin-bottom:16px"><div class="card-head"><h3>${title} <span class="muted" style="font-weight:500">· ${desc}</span></h3><span class="muted">${group(roles).length}</span></div>
+    <div class="people">${group(roles).map(row).join("") || `<div class="empty">None yet</div>`}</div></div>`;
+  return `<div class="page-head"><div><h2>Team</h2><p>Add the people who can sign in, their phone number and what they can do.</p></div>
     <div class="actions"><button class="btn btn-primary" id="add-person">${icon("plus")} Add person</button></div></div>
-    ${block("manager", "see all leads and assign them")}${block("officer", "see and follow up only their own leads")}${block("admin", "everything, plus team and partner bonds")}`;
+    ${missingPhone ? `<div class="card card-pad" style="margin-bottom:16px;border-color:#f6c9cb;background:var(--red-50);color:var(--red)"><b>${missingPhone} ${missingPhone > 1 ? "people need" : "person needs"} a phone number.</b> Click Edit to add it.</div>` : ""}
+    ${block("Management", "admin and director", ["admin", "director"])}
+    ${block("Marketing team", "managers assign leads; marketing officers view", ["manager", "marketing"])}
+    ${block("Credit officers", "follow up only their own leads", ["officer"])}`;
 }
 function bindTeam() {
   document.getElementById("add-person").onclick = () => personModal();
   app.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => personModal(S.staff.find((s) => s.email === b.dataset.edit))));
 }
-function personModal(p) {
+function personModal(p, focusPhone) {
   const isNew = !p;
   p = p || { name: "", email: "", role: "officer", active: true, phone: "" };
+  const self = !isNew && p.email === S.me.email;
   openModal(`<div class="modal-head"><h3>${isNew ? "Add person" : "Edit " + esc(p.name)}</h3><button class="btn btn-ghost" data-mclose>${icon("x")}</button></div>
-    <form id="pf"><div class="modal-body"><div class="form-grid">
-      <div class="full"><label class="lbl" for="pf-name">Full name</label><input class="input" id="pf-name" required maxlength="80" value="${esc(p.name)}"></div>
-      <div class="full"><label class="lbl" for="pf-email">Google account email</label><input class="input" id="pf-email" type="email" required value="${esc(p.email)}" ${isNew ? "" : "disabled"} placeholder="name@gmail.com or work Google email">
+    <form id="pf" novalidate><div class="modal-body"><div class="form-grid">
+      <div class="full"><label class="lbl" for="pf-name">Full name *</label><input class="input" id="pf-name" required maxlength="80" value="${esc(p.name)}"></div>
+      <div class="full"><label class="lbl" for="pf-phone">Phone number *</label><input class="input" id="pf-phone" type="tel" inputmode="tel" required value="${esc(p.phone || "")}" placeholder="07XXXXXXXX or +2567XXXXXXXX"></div>
+      <div class="full"><label class="lbl" for="pf-email">Google account email *</label><input class="input" id="pf-email" type="email" required value="${esc(p.email)}" ${isNew ? "" : "disabled"} placeholder="name@gmail.com or work Google email">
         <p class="muted" style="margin:6px 0 0;font-size:12px">They sign in with Google using exactly this email.</p></div>
-      <div><label class="lbl" for="pf-role">Role</label><select class="input" id="pf-role">${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${p.role === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
-      <div><label class="lbl" for="pf-phone">Phone (optional)</label><input class="input" id="pf-phone" value="${esc(p.phone || "")}" maxlength="20"></div>
-      ${isNew ? "" : `<div class="full"><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="pf-active" ${p.active !== false ? "checked" : ""}> Active (can sign in)</label></div>`}
+      <div class="full"><label class="lbl" for="pf-role">Role *</label><select class="input" id="pf-role" ${self ? "disabled" : ""}>${Object.entries(ROLES).map(([k, v]) => `<option value="${k}" ${p.role === k ? "selected" : ""}>${v}</option>`).join("")}</select>
+        <p class="muted" id="pf-role-info" style="margin:6px 0 0;font-size:12px">${esc(ROLE_INFO[p.role] || "")}</p></div>
+      ${isNew || self ? "" : `<div class="full"><label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="pf-active" ${p.active !== false ? "checked" : ""}> Active (can sign in)</label></div>`}
+      <p class="login-err full" id="pf-err" hidden style="margin:0"></p>
     </div></div>
-    <div class="modal-foot">${isNew ? "" : `<button type="button" class="btn btn-ghost" id="pf-del" style="color:var(--red);margin-right:auto">Remove</button>`}<button type="button" class="btn" data-mclose>Cancel</button><button class="btn btn-primary" type="submit">${isNew ? "Add to team" : "Save"}</button></div></form>`);
+    <div class="modal-foot">${isNew || self ? "" : `<button type="button" class="btn btn-ghost" id="pf-del" style="color:var(--red);margin-right:auto">Remove</button>`}<button type="button" class="btn" data-mclose>Cancel</button><button class="btn btn-primary" type="submit">${isNew ? "Add to team" : "Save"}</button></div></form>`);
+  const roleEl = document.getElementById("pf-role");
+  roleEl.onchange = () => (document.getElementById("pf-role-info").textContent = ROLE_INFO[roleEl.value] || "");
+  if (focusPhone) document.getElementById("pf-phone").focus();
+  const err = (m) => { const e = document.getElementById("pf-err"); e.textContent = m; e.hidden = false; };
   document.getElementById("pf").onsubmit = async (e) => {
     e.preventDefault();
     const email = (isNew ? document.getElementById("pf-email").value : p.email).trim().toLowerCase();
     const name = document.getElementById("pf-name").value.trim();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !name) return toast("Enter a name and a valid email.", true);
-    if (isNew && S.staff.some((s) => s.email === email)) return toast("That email is already on the team.", true);
+    const phone = normalizeUgPhone(document.getElementById("pf-phone").value);
+    if (name.length < 2) return err("Enter the person's full name.");
+    if (!phone) return err("Enter a valid Ugandan phone number, e.g. 0772123456 or +256772123456.");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return err("Enter a valid Google email.");
+    if (isNew && S.staff.some((s) => s.email === email)) return err("That email is already on the team.");
+    const activeEl = document.getElementById("pf-active");
     try {
-      await S.be.saveStaff(email, { name, role: document.getElementById("pf-role").value, phone: document.getElementById("pf-phone").value.trim(), active: isNew ? true : document.getElementById("pf-active").checked }, isNew);
-      toast(isNew ? `${name} added. They can sign in now.` : "Saved"); closeModal();
+      await S.be.saveStaff(email, { name, phone, role: self ? p.role : roleEl.value, active: activeEl ? activeEl.checked : true }, isNew);
+      toast(isNew ? `${name} added. They can sign in now.` : "Saved"); closeModal(); render();
     } catch (er) { fail(er); }
   };
   const del = document.getElementById("pf-del");

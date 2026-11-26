@@ -82,7 +82,17 @@
 
   var waUrl = "https://wa.me/" + digits(cfg.WHATSAPP_NUMBER) + "?text=" + encodeURIComponent(cfg.WHATSAPP_MESSAGE || "Hello DEED Microfinance");
   $$("[data-whatsapp]").forEach(function (a) { a.href = waUrl; });
-  $$("[data-call]").forEach(function (a) { a.href = "tel:" + String(cfg.CALL_NUMBER || "").replace(/[^\d+]/g, ""); });
+  // CALL_NUMBER may list several numbers ("+256 758 511610 / +256 781 048434"); the button dials the first.
+  var callNumbers = String(cfg.CALL_NUMBER || "").split(/[\/,;]| or /).map(function (n) { return n.trim(); }).filter(Boolean);
+  $$("[data-call]").forEach(function (a) { a.href = "tel:" + (callNumbers[0] || "").replace(/[^\d+]/g, ""); });
+  $$("[data-call-text]").forEach(function (el) {
+    el.hidden = !callNumbers.length;
+    el.innerHTML = "";
+    callNumbers.forEach(function (n, i) {
+      if (i) el.appendChild(document.createTextNode(" · "));
+      var a = document.createElement("a"); a.href = "tel:" + n.replace(/[^\d+]/g, ""); a.textContent = n; el.appendChild(a);
+    });
+  });
 
   var repay = $("#repayment_period");
   (cfg.REPAYMENT_OPTIONS || ["Not sure yet"]).forEach(function (o, i) {

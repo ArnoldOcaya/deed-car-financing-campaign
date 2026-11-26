@@ -65,23 +65,27 @@ Commit the changes from steps 2, 5 and 6.7 to `main` (or ask Claude to). Then Gi
 ## 8. First sign-in and setup
 
 1. Open `https://<project-id>.web.app/portal/` and **Continue with Google** with the admin email from step 5.
-2. **Team**: add Marketing Managers and Credit Officers by their Google email. They can sign in straight away.
+2. Add your own phone number when the red bar asks. Then **Team**: add the Director, Marketing Managers, Marketing Officers
+   and Credit Officers with their Google email and phone number. They can sign in straight away.
 3. **Partner bonds**: add **Banda Bond** (link code `banda_bond`) and any others.
 4. On each bond click **QR codes**, adjust the placements, and print. Each code carries the bond and the placement,
    so the dashboard shows which bond and which spot brings leads.
 
 ## Who can do what
 
-| | Admin | Marketing Manager | Credit Officer |
-| --- | :-: | :-: | :-: |
-| See dashboard | All leads | All leads | Own leads |
-| See leads | All | All | Only assigned to them |
-| Assign / reassign leads | ✓ | ✓ | |
-| Update status, follow-up, notes | ✓ | ✓ | Own leads |
-| Export CSV | ✓ | ✓ | |
-| Add staff, change roles | ✓ | | |
-| Add partner bonds, QR codes | ✓ | | |
-| Delete a lead | ✓ | | |
+| | Admin | Director | Marketing Manager | Marketing Officer | Credit Officer |
+| --- | :-: | :-: | :-: | :-: | :-: |
+| See dashboard | All leads | All leads | All leads | All leads | Own leads |
+| See leads and notes | All | All | All | All | Only assigned to them |
+| Assign / reassign leads | ✓ | | ✓ | | |
+| Update status, follow-up, notes | ✓ | | ✓ | | Own leads |
+| Export CSV | ✓ | ✓ | ✓ | ✓ | |
+| Add staff, change roles | ✓ | | | | |
+| Add partner bonds, QR codes | ✓ | | | | |
+| Delete a lead | ✓ | | | | |
+
+Every team member must have a Ugandan phone number on the system; the portal and the database both refuse a
+staff record without one. After the first admin signs in, the portal asks them to add their own number.
 
 The rules are enforced by the database itself (`firestore.rules`), not just hidden in the screen,
 and are covered by automated tests in `tests/`.

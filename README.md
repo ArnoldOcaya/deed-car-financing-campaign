@@ -12,7 +12,7 @@ Every QR code carries its own `?source=` so each lead shows where it came from.
 | --- | --- |
 | `public/index.html` | Landing page: hero, how it works, UGX calculator with readiness check, 4-step application, WhatsApp, call-back, call, share. |
 | `public/portal/` | **Staff portal** (`/portal/`): Google sign-in, dashboard, leads, assignment, follow-ups and notes, team roles, partner bonds with printable QR codes, CSV export. |
-| `firestore.rules` | Who can see and change what (admin, marketing manager, credit officer). Tested in `tests/`. |
+| `firestore.rules` | Who can see and change what for each role. Tested in `tests/` (52 checks). |
 | `public/config.js` | Contact numbers, partner bond names, lead prefix, repayment terms. |
 | `public/firebase-config.js` | Firebase web app settings. Empty = preview mode with sample data. |
 | `apps-script/Code.gs` | Optional backup copy of every lead into a DEED Google Sheet. |
@@ -23,8 +23,12 @@ No frameworks and no build step. Firebase's code loads only when needed, so the 
 ## Roles
 
 - **Admin**: everything, plus adds staff and partner bonds.
+- **Director**: sees all leads and the dashboard (view only).
 - **Marketing Manager**: sees all leads and assigns them to credit officers.
+- **Marketing Officer**: sees all leads and the dashboard (view only).
 - **Credit Officer**: sees only the leads assigned to them; calls, WhatsApps, logs attempts, updates status and follow-ups.
+
+Every staff member must have a phone number on the system.
 
 ## Go live
 

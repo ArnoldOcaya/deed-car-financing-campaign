@@ -8,9 +8,28 @@ export const DEMO = !cfg.projectId || !cfg.apiKey;
 
 export const ROLES = {
   admin: "Admin",
+  director: "Director",
   manager: "Marketing Manager",
+  marketing: "Marketing Officer",
   officer: "Credit Officer"
 };
+// What each role can do (the database rules enforce the same thing).
+export const ROLE_INFO = {
+  admin: "Everything, plus team and partner bonds",
+  director: "Sees all leads and the dashboard (view only)",
+  manager: "Sees all leads and assigns them to credit officers",
+  marketing: "Sees all leads and the dashboard (view only)",
+  officer: "Sees and follows up only their own leads"
+};
+
+// Ugandan phone numbers: 07XXXXXXXX, 03XXXXXXXX, +2567XXXXXXXX ... -> +256XXXXXXXXX
+export function normalizeUgPhone(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  if (/^0[1-9]\d{8}$/.test(d)) return "+256" + d.slice(1);
+  if (/^256[1-9]\d{8}$/.test(d)) return "+" + d;
+  if (/^[37]\d{8}$/.test(d)) return "+256" + d;
+  return null;
+}
 
 export const STATUSES = [
   "New Lead", "Contact Attempted", "Contacted", "Interested", "Documents Pending",
@@ -56,7 +75,7 @@ async function firebaseBackend() {
       }
     }
     const s = snap.data();
-    return { email, name: s.name || user.displayName || email, photo: user.photoURL, role: s.role,
+    return { email, name: s.name || user.displayName || email, photo: user.photoURL, role: s.role, phone: s.phone || "",
       authorised: s.active === true };
   }
 
@@ -103,10 +122,11 @@ async function firebaseBackend() {
     addActivity(id, activity) {
       return F.addDoc(F.collection(db, "leads", id, "activity"), { ...activity, by: me.email, byName: me.name, at: F.serverTimestamp() });
     },
-    saveStaff(email, data, isNew) {
-      const payload = { name: data.name, role: data.role, active: data.active !== false, phone: data.phone || "" };
+    async saveStaff(email, data, isNew) {
+      const payload = { name: data.name, role: data.role, active: data.active !== false, phone: data.phone };
       if (isNew) { payload.addedBy = me.email; payload.addedAt = F.serverTimestamp(); }
-      return F.setDoc(F.doc(db, "staff", email.toLowerCase()), payload, { merge: true });
+      await F.setDoc(F.doc(db, "staff", email.toLowerCase()), payload, { merge: true });
+      if (email.toLowerCase() === me.email) Object.assign(me, { name: data.name, phone: data.phone });
     },
     removeStaff(email) { return F.deleteDoc(F.doc(db, "staff", email)); },
     watchPartners(cb, onErr) {
@@ -128,11 +148,13 @@ function demoBackend() {
   const listeners = { leads: new Set(), staff: new Set(), act: new Map() };
   let me = null;
   const staff = [
-    { email: "arnold@deed.example", name: "Arnold (you)", role: "admin", active: true },
-    { email: "grace@deed.example", name: "Grace Namutebi", role: "manager", active: true },
-    { email: "peter@deed.example", name: "Peter Okello", role: "officer", active: true },
-    { email: "sarah@deed.example", name: "Sarah Achieng", role: "officer", active: true },
-    { email: "david@deed.example", name: "David Mugisha", role: "officer", active: true }
+    { email: "arnold@deed.example", name: "Arnold (you)", role: "admin", active: true, phone: "+256758511610" },
+    { email: "director@deed.example", name: "Robert Kasozi", role: "director", active: true, phone: "+256772100200" },
+    { email: "grace@deed.example", name: "Grace Namutebi", role: "manager", active: true, phone: "+256772300400" },
+    { email: "brenda@deed.example", name: "Brenda Nakimuli", role: "marketing", active: true, phone: "+256701500600" },
+    { email: "peter@deed.example", name: "Peter Okello", role: "officer", active: true, phone: "+256782700800" },
+    { email: "sarah@deed.example", name: "Sarah Achieng", role: "officer", active: true, phone: "+256752900100" },
+    { email: "david@deed.example", name: "David Mugisha", role: "officer", active: true, phone: "+256703200300" }
   ];
   const names = ["John Ssempa", "Mary Nakato", "Brian Tumusiime", "Esther Akello", "Joseph Kato", "Ruth Nansubuga",
     "Moses Okot", "Agnes Babirye", "Isaac Mwesigwa", "Florence Atim", "Samuel Lubega", "Harriet Namuli",
@@ -201,7 +223,7 @@ function demoBackend() {
     onAuth(cb) { authCb = cb; setTimeout(() => cb(null), 50); return () => {}; },
     async signIn(asEmail) {
       const s = staff.find((x) => x.email === (asEmail || staff[0].email));
-      me = { email: s.email, name: s.name, role: s.role, authorised: true, photo: null };
+      me = { email: s.email, name: s.name, role: s.role, phone: s.phone || "", authorised: true, photo: null };
       authCb(me);
     },
     async signOut() { me = null; authCb(null); },
@@ -227,6 +249,7 @@ function demoBackend() {
     async saveStaff(email, data) {
       const s = staff.find((x) => x.email === email);
       if (s) Object.assign(s, data); else staff.push({ email, ...data, active: data.active !== false });
+      if (me && email === me.email) Object.assign(me, { name: data.name, phone: data.phone });
       emit();
     },
     watchPartners(cb) { listeners.partners.add(cb); cb(partners.map((p) => ({ ...p }))); return () => listeners.partners.delete(cb); },

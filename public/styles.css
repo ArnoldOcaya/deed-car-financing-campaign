@@ -103,6 +103,8 @@ a { color: var(--brand-2); }
 .meter span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s ease; }
 .meter span.full { background: var(--wa); }
 .tagline { font-style: italic; opacity: .85; }
+.call-line { font-weight: 700; margin-bottom: 14px; }
+.call-line a { color: var(--brand); text-decoration: none; white-space: nowrap; }
 .ready-msg { font-weight: 650; }
 #calc-apply { margin-top: 10px; }
 

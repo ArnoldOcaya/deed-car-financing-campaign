@@ -7,7 +7,7 @@
  */
 
 var SETTINGS = {
-  LEAD_PREFIX: 'VFC-2026-',            // Lead IDs look like VFC-2026-0001
+  LEAD_PREFIX: 'DEEDVFC-2026-',        // Lead IDs look like DEEDVFC-2026-0001 (match LEAD_PREFIX in public/config.js)
   NOTIFY_EMAILS: '',                   // e.g. 'coordinator@deed.example, officer@deed.example' (leave empty for none)
   CONTRIBUTION_PCT: 30,
   RAW_SHEET: 'Raw Submissions',
@@ -69,7 +69,7 @@ function doPost(e) {
       var ss = SpreadsheetApp.getActiveSpreadsheet();
       ensureSheets_(ss);
       // When the portal (Firebase) already gave a reference, reuse it so both records match.
-      var leadId = /^[A-Z]{2,5}-\d{4}-\d+$/.test(String(data.lead_ref || '')) ? String(data.lead_ref) : nextLeadId_();
+      var leadId = /^[A-Z]{2,10}-\d{4}-\d+$/.test(String(data.lead_ref || '')) ? String(data.lead_ref) : nextLeadId_();
       var now = new Date();
 
       appendRaw_(ss, leadId, now, data);

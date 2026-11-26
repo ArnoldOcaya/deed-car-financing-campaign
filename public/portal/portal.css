@@ -252,6 +252,8 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--navy); }
 .role-admin { background: var(--red-50); color: var(--red); }
 .role-manager { background: var(--amber-50); color: var(--amber); }
 .role-officer { background: var(--navy-50); color: var(--navy-700); }
+.role-director { background: #1c1f4d; color: #fff; }
+.role-marketing { background: var(--green-50); color: var(--green); }
 .inactive { opacity: .5; }
 .partners { display: grid; gap: 12px; grid-template-columns: 1fr; }
 .partner { padding: 16px; display: grid; gap: 12px; }

@@ -4,8 +4,12 @@ rules_version = '2';
 //
 //   Public (landing page)  -> can only CREATE a new lead, nothing else.
 //   Credit Officer         -> sees and updates only leads assigned to them.
+//   Marketing Officer      -> sees all leads and the dashboard (read only).
+//   Director               -> sees all leads and the dashboard (read only).
 //   Marketing Manager      -> sees all leads, assigns them, updates progress.
 //   Admin                  -> everything, plus manages the team and partner bonds.
+//
+// Every staff record must have a Ugandan phone number (+256XXXXXXXXX).
 //
 // Staff are documents in /staff/{email}. Only admins add them.
 // The very first admin is whoever signs in with an email in ownerEmails().
@@ -29,6 +33,14 @@ service cloud.firestore {
     function role() { return me().role; }
     function isAdmin() { return isStaff() && role() == 'admin'; }
     function isManager() { return isStaff() && (role() == 'manager' || role() == 'admin'); }
+    function canViewAll() { return isStaff() && role() in ['admin', 'director', 'manager', 'marketing']; }
+    function validStaff(d) {
+      return d.keys().hasOnly(['name', 'role', 'active', 'addedBy', 'addedAt', 'phone'])
+        && d.role in ['admin', 'director', 'manager', 'marketing', 'officer']
+        && d.name is string && d.name.size() >= 2 && d.name.size() <= 80
+        && d.active is bool
+        && d.phone is string && d.phone.matches('^\\+256[0-9]{9}$');
+    }
     function isOfficerOf(lead) { return isStaff() && lead.assignedTo == myEmail(); }
 
     function counterPath() { return /databases/$(database)/documents/counters/leads; }
@@ -56,7 +68,7 @@ service cloud.firestore {
         && d.seq is int && d.seq == countBefore() + 1
         && getAfter(counterPath()).data.n == d.seq
         && getAfter(counterPath()).data.lastLead == leadId
-        && d.ref is string && d.ref.matches('^[A-Z]{2,5}-[0-9]{4}-0*' + string(d.seq) + '$')
+        && d.ref is string && d.ref.matches('^[A-Z]{2,10}-[0-9]{4}-0*' + string(d.seq) + '$')
         && d.leadType in ['Application', 'Call-back request']
         && reqStr(d, 'fullName', 2, 100)
         && d.phone is string && d.phone.matches('^\\+2567[0-9]{8}$')
@@ -93,8 +105,8 @@ service cloud.firestore {
     match /leads/{leadId} {
       allow create: if validNewLead(request.resource.data, leadId);
 
-      allow get: if isManager() || isOfficerOf(resource.data);
-      allow list: if isManager() || (isStaff() && resource.data.assignedTo == myEmail());
+      allow get: if canViewAll() || isOfficerOf(resource.data);
+      allow list: if canViewAll() || (isStaff() && resource.data.assignedTo == myEmail());
 
       // Managers/admins: assign and update progress. Customer answers are never edited.
       allow update: if isManager()
@@ -120,7 +132,7 @@ service cloud.firestore {
       // Contact history / notes
       match /activity/{activityId} {
         function parent() { return get(/databases/$(database)/documents/leads/$(leadId)).data; }
-        allow read: if isManager() || isOfficerOf(parent());
+        allow read: if canViewAll() || isOfficerOf(parent());
         allow create: if (isManager() || isOfficerOf(parent()))
           && request.resource.data.keys().hasOnly(['type', 'text', 'by', 'byName', 'at'])
           && request.resource.data.by == myEmail()
@@ -145,13 +157,11 @@ service cloud.firestore {
     match /staff/{email} {
       allow read: if isStaff() || (signedIn() && email == myEmail());
       allow write: if isAdmin()
-        && (request.resource == null || (
-             request.resource.data.keys().hasOnly(['name', 'role', 'active', 'addedBy', 'addedAt', 'phone'])
-             && request.resource.data.role in ['admin', 'manager', 'officer']
-             && email == email.lower()))
+        && (request.resource == null || (validStaff(request.resource.data) && email == email.lower()))
         // An admin can't remove or demote themselves (avoids locking everyone out).
         && (email != myEmail() || (request.resource != null && request.resource.data.role == 'admin' && request.resource.data.active == true));
-      // Bootstrap: the owner creates their own admin record on first sign-in.
+      // Bootstrap: the owner creates their own admin record on first sign-in
+      // (phone can be added right after, from the portal).
       allow create: if signedIn() && email == myEmail() && myEmail() in ownerEmails()
         && request.resource.data.role == 'admin' && request.resource.data.active == true
         && request.resource.data.keys().hasOnly(['name', 'role', 'active', 'addedBy', 'addedAt', 'phone']);

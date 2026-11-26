@@ -8,7 +8,7 @@ window.DEED_CONFIG = {
   // With neither set, the form runs in demo mode: it works but nothing is saved.
   SHEET_ENDPOINT: "https://script.google.com/macros/s/AKfycbzbjZEoWX-lHosR10jjdw_gpIwM1ZNuMMdH9eKfugiUUeTxSKEQZDvycCnpUjbj5-i6/exec",
 
-  // TODO: DEED's real numbers. International format, digits only, no "+".
+  // WhatsApp: international format, digits only. Call: one or more numbers separated by "/".
   WHATSAPP_NUMBER: "256758511610",
   CALL_NUMBER: "+256 758 511610 / +256 781 048434",
 
@@ -20,7 +20,7 @@ window.DEED_CONFIG = {
   PARTNERS: { banda_bond: "Banda Bond" },
   DEFAULT_PARTNER_NAME: "our partner car bonds",
 
-  // Lead reference prefix: VFC-2026-0001, VFC-2026-0002, ...
+  // Lead reference prefix: DEEDVFC-2026-0001, ... (2-10 capital letters, a dash, a 4-digit year, a dash)
   LEAD_PREFIX: "DEEDVFC-2026-",
 
   // Split shown in the calculator.
