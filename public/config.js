@@ -6,11 +6,11 @@ window.DEED_CONFIG = {
   // Leads are saved to Firebase (see firebase-config.js) for the staff portal.
   // Optional backup copy to a Google Sheet: Apps Script web app URL (docs/GOOGLE_SHEET_SETUP.md).
   // With neither set, the form runs in demo mode: it works but nothing is saved.
-  SHEET_ENDPOINT: "",
+  SHEET_ENDPOINT: "https://script.google.com/macros/s/AKfycbzbjZEoWX-lHosR10jjdw_gpIwM1ZNuMMdH9eKfugiUUeTxSKEQZDvycCnpUjbj5-i6/exec",
 
   // TODO: DEED's real numbers. International format, digits only, no "+".
-  WHATSAPP_NUMBER: "256700000000",
-  CALL_NUMBER: "+256700000000",
+  WHATSAPP_NUMBER: "256758511610",
+  CALL_NUMBER: "+256 758 511610 / +256 781 048434",
 
   BRAND_NAME: "DEED Microfinance",
 
@@ -21,7 +21,7 @@ window.DEED_CONFIG = {
   DEFAULT_PARTNER_NAME: "our partner car bonds",
 
   // Lead reference prefix: VFC-2026-0001, VFC-2026-0002, ...
-  LEAD_PREFIX: "VFC-2026-",
+  LEAD_PREFIX: "DEEDVFC-2026-",
 
   // Split shown in the calculator.
   CONTRIBUTION_PCT: 30,
