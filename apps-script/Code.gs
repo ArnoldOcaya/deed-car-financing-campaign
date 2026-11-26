@@ -8,7 +8,11 @@
 
 var SETTINGS = {
   LEAD_PREFIX: 'DEEDVFC-2026-',        // Lead IDs look like DEEDVFC-2026-0001 (match LEAD_PREFIX in public/config.js)
-  NOTIFY_EMAILS: '',                   // e.g. 'coordinator@deed.example, officer@deed.example' (leave empty for none)
+  NOTIFY_EMAILS: '',                   // Extra fixed recipients, e.g. 'coordinator@deed.example' (optional)
+  // Who gets an email for every new lead is managed in the staff portal (Team > New lead emails).
+  // This needs the Google account that owns this script to have access to the Firebase project.
+  FIREBASE_PROJECT_ID: 'deed-car-financing',
+  PORTAL_URL: 'https://arnoldocaya.github.io/deed-car-financing-campaign/portal/',
   CONTRIBUTION_PCT: 30,
   RAW_SHEET: 'Raw Submissions',
   TRACKER_SHEET: 'Lead Tracker',
@@ -19,7 +23,7 @@ var SETTINGS = {
 var RAW_HEADERS = [
   'Lead ID', 'Received At', 'Lead Type', 'Source', 'Full Name', 'Phone', 'Alt Phone',
   'Preferred Contact Method', 'Area', 'Vehicle', 'Make', 'Model', 'Year', 'Vehicle Price (UGX)',
-  'Buying From Partner', 'Car Bond / Salesperson', 'Can Raise 30%', 'Available Contribution (UGX)',
+  'Buying From Partner', 'Officer Attached', 'Can Raise 30%', 'Available Contribution (UGX)',
   'Purchase Timeline', 'Repayment Period', 'Income Source', 'Wants Officer Contact',
   'Preferred Contact Time', 'Questions', 'Consent', 'Submission ID', 'Page URL', 'Referrer',
   'Landed At', 'Client Time', 'User Agent', 'Partner Bond'
@@ -165,7 +169,7 @@ function appendRaw_(ss, id, now, d) {
   ss.getSheetByName(SETTINGS.RAW_SHEET).appendRow([
     id, now, txt_(d.lead_type), txt_(d.source), txt_(d.full_name), txt_(d.phone), txt_(d.alt_phone),
     txt_(d.contact_method), txt_(d.area), txt_(d.vehicle), txt_(d.vehicle_make), txt_(d.vehicle_model),
-    txt_(d.vehicle_year), num_(d.vehicle_price), txt_(d.from_partner), txt_(d.salesperson),
+    txt_(d.vehicle_year), num_(d.vehicle_price), txt_(d.from_partner), txt_(d.attached_officer || d.salesperson),
     txt_(d.can_raise), d.available_contribution === 0 ? 0 : num_(d.available_contribution),
     txt_(d.timeline), txt_(d.repayment_period), txt_(d.income_source), txt_(d.wants_contact),
     txt_(d.contact_time), txt_(d.questions), txt_(d.consent), txt_(d.submission_id), txt_(d.page_url),
@@ -185,7 +189,7 @@ function appendTracker_(ss, id, now, d) {
     '=IF(H' + r + '="","",H' + r + '*' + pct + ')',
     '=IF(H' + r + '="","",H' + r + '*' + (1 - pct) + ')',
     d.available_contribution === 0 ? 0 : num_(d.available_contribution),
-    txt_([d.partner_name || d.partner_id, d.source, d.salesperson].filter(String).join(' / ')),
+    txt_([d.partner_name || d.partner_id, d.source, d.attached_officer || d.salesperson].filter(String).join(' / ')),
     txt_(d.contact_method), '', 'New Lead', '', 0, '', '', 'No', '', 'Open', '',
     txt_(d.lead_type), txt_(d.contact_time),
     waNum ? '=HYPERLINK("https://wa.me/' + waNum + '","WhatsApp")' : ''
@@ -275,24 +279,58 @@ function buildDashboard_(ss) {
   sh.setColumnWidth(1, 220); sh.setColumnWidth(3, 300);
 }
 
+// Recipients = the list the admin keeps in the portal + any fixed NOTIFY_EMAILS. Cached for 5 minutes.
+function notifyEmails_() {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('notify_emails');
+  var fromPortal = [];
+  if (cached !== null) {
+    fromPortal = cached ? cached.split(',') : [];
+  } else if (SETTINGS.FIREBASE_PROJECT_ID) {
+    try {
+      var url = 'https://firestore.googleapis.com/v1/projects/' + SETTINGS.FIREBASE_PROJECT_ID +
+        '/databases/(default)/documents/settings/notify';
+      var res = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true });
+      if (res.getResponseCode() === 200) {
+        var f = JSON.parse(res.getContentText()).fields || {};
+        var vals = (f.emails && f.emails.arrayValue && f.emails.arrayValue.values) || [];
+        fromPortal = vals.map(function (v) { return String(v.stringValue || '').trim(); }).filter(String);
+        cache.put('notify_emails', fromPortal.join(','), 300);
+      } else {
+        console.warn('Could not read portal email list: HTTP ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 200));
+      }
+    } catch (ex) {
+      console.warn('Could not read portal email list', ex);
+    }
+  }
+  var all = fromPortal.concat(String(SETTINGS.NOTIFY_EMAILS || '').split(','))
+    .map(function (e) { return e.trim().toLowerCase(); })
+    .filter(function (e) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e); });
+  return all.filter(function (e, i) { return all.indexOf(e) === i; });
+}
+
 function notify_(id, d) {
-  if (!SETTINGS.NOTIFY_EMAILS) return;
+  var to = notifyEmails_();
+  if (!to.length) return;
   try {
     var price = Number(d.vehicle_price) || 0;
     var lines = [
       'New ' + (d.lead_type || 'lead') + ': ' + id,
       '',
       'Name: ' + d.full_name,
-      'Phone: ' + d.phone + (d.alt_phone ? ' / ' + d.alt_phone : ''),
+      'Phone: ' + d.phone,
       'Contact: ' + (d.contact_method || '-') + ', ' + (d.contact_time || '-'),
       'Area: ' + (d.area || '-'),
       'Vehicle: ' + (d.vehicle || '-') + (price ? ' at UGX ' + price.toLocaleString() : ''),
       'Can raise 30%: ' + (d.can_raise || '-') + (d.available_contribution ? ' (has UGX ' + Number(d.available_contribution).toLocaleString() + ')' : ''),
-      'Source: ' + (d.source || 'direct'),
+      'Partner bond: ' + (d.partner_name || d.partner_id || '-'),
+      'Officer attached: ' + (d.attached_officer || 'none (a manager will assign it)'),
+      d.entered_by ? 'Entered in the portal by: ' + d.entered_by : 'Source: ' + (d.source || 'direct'),
       '',
-      'Open the Lead Tracker: ' + SpreadsheetApp.getActiveSpreadsheet().getUrl()
+      'Staff portal: ' + SETTINGS.PORTAL_URL,
+      'Lead Tracker sheet: ' + SpreadsheetApp.getActiveSpreadsheet().getUrl()
     ];
-    MailApp.sendEmail(SETTINGS.NOTIFY_EMAILS, 'New vehicle financing lead ' + id + ' (' + (d.source || 'direct') + ')', lines.join('\n'));
+    MailApp.sendEmail(to.join(','), 'New vehicle financing lead ' + id + ' · ' + (d.full_name || ''), lines.join('\n'));
   } catch (ex) {
     console.error('Email failed', ex);
   }
@@ -316,4 +354,11 @@ function testSubmission() {
     wants_contact: 'Yes', contact_time: 'Morning', consent: 'Yes'
   }) } });
   console.log(res.getContent());
+}
+
+// Run this from the editor to check who gets the new-lead emails (and send them a test).
+function testEmail() {
+  var to = notifyEmails_();
+  console.log('New-lead emails go to: ' + (to.join(', ') || 'nobody yet. Add emails in the portal: Team > New lead emails.'));
+  if (to.length) MailApp.sendEmail(to.join(','), 'DEED test: new lead emails work', 'You will get an email like this for every new vehicle financing lead.\n\nStaff portal: ' + SETTINGS.PORTAL_URL);
 }

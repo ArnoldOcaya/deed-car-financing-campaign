@@ -94,12 +94,63 @@
     });
   });
 
-  var repay = $("#repayment_period");
-  (cfg.REPAYMENT_OPTIONS || ["Not sure yet"]).forEach(function (o, i) {
-    var opt = document.createElement("option");
-    opt.textContent = o; opt.value = i === 0 && /not sure/i.test(o) ? "" : o;
-    repay.appendChild(opt);
+  /* ---------- car brand / model dropdowns ---------- */
+  var CARS = window.DEED_CARS || {};
+  var OTHER = "Other";
+  var makeSel = $("#vehicle_make"), modelSel = $("#vehicle_model");
+  var otherWrap = $("#vehicle_other_wrap"), otherInput = $("#vehicle_other");
+  function addOpt(sel, value, label) {
+    var o = document.createElement("option"); o.value = value; o.textContent = label || value; sel.appendChild(o);
+  }
+  Object.keys(CARS).forEach(function (b) { addOpt(makeSel, b); });
+  addOpt(makeSel, OTHER, "Other (type it)");
+  function showOther(on, label, placeholder) {
+    otherWrap.hidden = !on;
+    otherInput.required = on;
+    if (on) {
+      otherWrap.querySelector("label").innerHTML = label + ' <span class="req">*</span>';
+      otherInput.placeholder = placeholder;
+    } else otherInput.value = "";
+  }
+  makeSel.addEventListener("change", function () {
+    var b = makeSel.value;
+    modelSel.innerHTML = "";
+    if (!b || b === OTHER) {
+      addOpt(modelSel, "", b ? "Type it below" : "Choose brand first");
+      modelSel.disabled = true;
+      showOther(b === OTHER, "Type the car (brand and model)", "e.g. Peugeot 3008");
+      return;
+    }
+    modelSel.disabled = false;
+    addOpt(modelSel, "", "Choose model");
+    (CARS[b] || []).forEach(function (m) { addOpt(modelSel, m); });
+    addOpt(modelSel, OTHER, "Other (type it)");
+    showOther(false);
   });
+  modelSel.addEventListener("change", function () {
+    showOther(modelSel.value === OTHER, "Type the " + makeSel.value + " model", "e.g. " + ((CARS[makeSel.value] || [])[0] || "model"));
+  });
+  function vehicleFields(d) {
+    var make = d.vehicle_make || "", model = d.vehicle_model || "", other = d.vehicle_other || "";
+    if (make === OTHER) return { vehicle: other, vehicle_make: "", vehicle_model: "" };
+    if (model === OTHER) model = other;
+    return { vehicle: (make + " " + model).trim(), vehicle_make: make, vehicle_model: model.slice(0, 40) };
+  }
+
+  /* ---------- "Officer attached": live list of DEED credit officers ---------- */
+  var officerSel = $("#attached_officer");
+  var officerNames = {};
+  if (FB_ON) {
+    getDb().then(function (x) { return x.F.getDocs(x.F.collection(x.db, "publicOfficers")); })
+      .then(function (snap) {
+        var list = [];
+        snap.forEach(function (d) { var v = d.data(); if (v.active !== false && v.name) list.push({ id: d.id, name: v.name }); });
+        list.sort(function (a, b) { return a.name.localeCompare(b.name); });
+        list.forEach(function (o) { officerNames[o.id] = o.name; addOpt(officerSel, o.id, o.name); });
+        $("#officer_wrap").hidden = !list.length;
+      })
+      .catch(function () {});
+  }
 
   /* ---------- money input formatting ---------- */
   function bindMoney(input, onChange) {
@@ -205,7 +256,7 @@
     var seenRadio = {};
     $$("input, select, textarea", scope).forEach(function (el) {
       if (el.closest("[hidden]") && el.closest("[hidden]") !== scope) return;
-      if (el.closest(".hp")) return;
+      if (el.closest(".hp") || el.disabled) return;
       var bad = null;
       if (el.type === "radio") {
         if (seenRadio[el.name]) return;
@@ -282,14 +333,14 @@
       var F = x.F, db = x.db;
       var lead = clean({
         leadType: p.lead_type, source: p.source, partnerId: p.partner_id, partnerName: p.partner_name,
-        fullName: p.full_name, phone: p.phone, altPhone: p.alt_phone, contactMethod: p.contact_method, area: p.area,
-        vehicle: p.vehicle, vehicleMake: p.vehicle_make, vehicleModel: p.vehicle_model, vehicleYear: p.vehicle_year,
-        vehiclePrice: p.vehicle_price || undefined, fromPartner: p.from_partner, salesperson: p.salesperson, canRaise: p.can_raise,
+        fullName: p.full_name, phone: p.phone, contactMethod: p.contact_method, area: p.area,
+        vehicle: p.vehicle, vehicleMake: p.vehicle_make, vehicleModel: p.vehicle_model,
+        vehiclePrice: p.vehicle_price || undefined, fromPartner: p.from_partner, canRaise: p.can_raise,
+        attachedOfficerId: p.attached_officer_id, attachedOfficerName: p.attached_officer,
         availableContribution: typeof p.available_contribution === "number" ? p.available_contribution : undefined,
-        timeline: p.timeline, repaymentPeriod: p.repayment_period, incomeSource: p.income_source, wantsContact: p.wants_contact,
-        contactTime: p.contact_time, questions: p.questions, consent: p.consent, contributionPct: p.contribution_pct,
-        submissionId: p.submission_id, pageUrl: (p.page_url || "").slice(0, 500), referrer: (p.referrer || "").slice(0, 500),
-        landedAt: p.landed_at, userAgent: p.user_agent
+        timeline: p.timeline, incomeSource: p.income_source,
+        contactTime: p.contact_time, questions: p.questions, consent: p.consent, contributionPct: p.contribution_pct
+        // Browser details (page, referrer, device) go only to the Google Sheet copy.
       });
       lead.status = "New Lead"; lead.outcome = "Open"; lead.assignedTo = null; lead.contactAttempts = 0;
       var prefix = cfg.LEAD_PREFIX || "VFC-2026-";
@@ -364,14 +415,15 @@
     var data = collect(form);
     if (data.company_website) { onSuccess({ lead_id: "OK" }); return; } // bot: pretend success
 
-    var payload = Object.assign(baseMeta("Application"), data, {
+    var payload = Object.assign(baseMeta("Application"), data, vehicleFields(data), {
       phone: normalizePhone(data.phone),
-      alt_phone: data.alt_phone ? normalizePhone(data.alt_phone) : "",
+      attached_officer_id: data.attached_officer || "",
+      attached_officer: data.attached_officer ? (officerNames[data.attached_officer] || "") : "",
       vehicle_price: toNum(data.vehicle_price),
       available_contribution: toNum(data.available_contribution),
       contribution_pct: PCT
     });
-    delete payload.company_website;
+    delete payload.company_website; delete payload.vehicle_other;
 
     submitting = true;
     btnSubmit.disabled = true; btnSubmit.textContent = "Sending…";
@@ -411,7 +463,7 @@
     var data = collect(cbForm);
     var btn = $("#cb-submit");
     if (data.company_website) { $("#cb-done").hidden = false; btn.hidden = true; return; }
-    var payload = Object.assign(baseMeta("Call-back request"), data, { phone: normalizePhone(data.phone), wants_contact: "Yes" });
+    var payload = Object.assign(baseMeta("Call-back request"), data, { phone: normalizePhone(data.phone) });
     delete payload.company_website;
     btn.disabled = true; btn.textContent = "Sending…";
     send(payload).then(function (res) {

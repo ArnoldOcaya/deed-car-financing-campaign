@@ -12,7 +12,7 @@ Every QR code carries its own `?source=` so each lead shows where it came from.
 | --- | --- |
 | `public/index.html` | Landing page: hero, how it works, UGX calculator with readiness check, 4-step application, WhatsApp, call-back, call, share. |
 | `public/portal/` | **Staff portal** (`/portal/`): Google sign-in, dashboard, leads, assignment, follow-ups and notes, team roles, partner bonds with printable QR codes, CSV export. |
-| `firestore.rules` | Who can see and change what for each role. Tested in `tests/` (52 checks). |
+| `firestore.rules` | Who can see and change what for each role. Tested in `tests/` (80 checks). |
 | `public/config.js` | Contact numbers, partner bond names, lead prefix, repayment terms. |
 | `public/firebase-config.js` | Firebase web app settings. Empty = preview mode with sample data. |
 | `apps-script/Code.gs` | Optional backup copy of every lead into a DEED Google Sheet. |

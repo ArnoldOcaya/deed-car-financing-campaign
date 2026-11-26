@@ -3,6 +3,7 @@ rules_version = '2';
 // DEED Vehicle Financing: who can do what.
 //
 //   Public (landing page)  -> can only CREATE a new lead, nothing else.
+//   Any staff member       -> can also enter a lead for a customer (e.g. one who won't scan the QR).
 //   Credit Officer         -> sees and updates only leads assigned to them.
 //   Marketing Officer      -> sees all leads and the dashboard (read only).
 //   Director               -> sees all leads and the dashboard (read only).
@@ -42,20 +43,28 @@ service cloud.firestore {
         && d.phone is string && d.phone.matches('^\\+256[0-9]{9}$');
     }
     function isOfficerOf(lead) { return isStaff() && lead.assignedTo == myEmail(); }
+    // The id this officer has in the public "Officer attached" list (same hash as the portal makes).
+    function myOfficerKey() { return hashing.sha256('deed-officer:' + myEmail()).toHexString().lower()[0:20]; }
+    // A customer picked this officer as "Officer attached" and nobody has the lead yet.
+    function isAttachedTo(lead) {
+      return isStaff() && role() == 'officer' && lead.get('assignedTo', null) == null
+        && lead.get('attachedOfficerId', '') == myOfficerKey();
+    }
 
     function counterPath() { return /databases/$(database)/documents/counters/leads; }
     function countBefore() { return exists(counterPath()) ? get(counterPath()).data.n : 0; }
 
-    function optStr(d, k, max) { return !(k in d) || d[k] == null || (d[k] is string && d[k].size() <= max); }
+    function optStr(d, k, max) { return !(k in d) || (d[k] is string && d[k].size() <= max); }
     function optNum(d, k) { return !(k in d) || d[k] == null || (d[k] is number && d[k] >= 0 && d[k] < 10000000000000); }
     function reqStr(d, k, min, max) { return k in d && d[k] is string && d[k].size() >= min && d[k].size() <= max; }
 
     function customerKeys() {
-      return ['ref', 'seq', 'leadType', 'source', 'fullName', 'phone', 'altPhone', 'contactMethod',
-        'area', 'vehicle', 'vehicleMake', 'vehicleModel', 'vehicleYear', 'vehiclePrice', 'fromPartner',
-        'salesperson', 'canRaise', 'availableContribution', 'timeline', 'repaymentPeriod',
-        'incomeSource', 'wantsContact', 'contactTime', 'questions', 'consent', 'contributionPct',
-        'submissionId', 'pageUrl', 'referrer', 'landedAt', 'userAgent', 'createdAt', 'partnerId', 'partnerName'];
+      return ['ref', 'seq', 'leadType', 'source', 'fullName', 'phone', 'contactMethod',
+        'area', 'vehicle', 'vehicleMake', 'vehicleModel', 'vehiclePrice', 'fromPartner',
+        'canRaise', 'availableContribution', 'timeline',
+        'incomeSource', 'contactTime', 'questions', 'consent', 'contributionPct',
+        'createdAt', 'partnerId', 'partnerName',
+        'attachedOfficerId', 'attachedOfficerName', 'enteredBy', 'enteredByName'];
     }
     function workKeys() {
       return ['status', 'lastContactAt', 'contactAttempts', 'nextFollowUp', 'loanAppStarted',
@@ -76,17 +85,40 @@ service cloud.firestore {
         && reqStr(d, 'source', 1, 60)
         && d.createdAt == request.time
         && d.status == 'New Lead' && d.outcome == 'Open'
-        && d.assignedTo == null && d.contactAttempts == 0
-        && optStr(d, 'altPhone', 20) && optStr(d, 'contactMethod', 20) && optStr(d, 'area', 80)
+        && d.contactAttempts == 0
+        && validEntry(d) && validAttachedOfficer(d)
+        && optStr(d, 'contactMethod', 20) && optStr(d, 'area', 80)
         && optStr(d, 'vehicle', 100) && optStr(d, 'vehicleMake', 40) && optStr(d, 'vehicleModel', 40)
-        && optStr(d, 'vehicleYear', 4) && optNum(d, 'vehiclePrice') && optStr(d, 'fromPartner', 20)
-        && optStr(d, 'salesperson', 80) && optStr(d, 'canRaise', 40) && optNum(d, 'availableContribution')
-        && optStr(d, 'timeline', 40) && optStr(d, 'repaymentPeriod', 40) && optStr(d, 'incomeSource', 40)
-        && optStr(d, 'wantsContact', 5) && optStr(d, 'contactTime', 20) && optStr(d, 'questions', 1000)
-        && optStr(d, 'submissionId', 64) && optStr(d, 'pageUrl', 500) && optStr(d, 'referrer', 500)
-        && optStr(d, 'landedAt', 40) && optStr(d, 'userAgent', 250)
+        && optNum(d, 'vehiclePrice') && optStr(d, 'fromPartner', 20)
+        && optStr(d, 'canRaise', 40) && optNum(d, 'availableContribution')
+        && optStr(d, 'timeline', 40) && optStr(d, 'incomeSource', 40)
+        && optStr(d, 'contactTime', 20) && optStr(d, 'questions', 1000)
         && optStr(d, 'partnerId', 60) && optStr(d, 'partnerName', 80)
         && (d.leadType != 'Application' || (reqStr(d, 'vehicle', 1, 100) && d.vehiclePrice is number && d.vehiclePrice > 0));
+    }
+
+    // A lead typed in by staff records who entered it. The public can't claim to be staff.
+    // New leads arrive unassigned, except staff entries: an officer may take it themselves,
+    // a manager/admin may give it to any team member.
+    function validEntry(d) {
+      return !('enteredBy' in d)
+        ? (!('assignedTo' in d) || d.assignedTo == null)
+        : validStaffEntry(d, myEmail(), me());
+    }
+    function validStaffEntry(d, email, m) {
+      return signedIn() && m.active == true && d.enteredBy == email && d.source == 'staff_entry'
+        && optStr(d, 'enteredByName', 80)
+        && (!('assignedTo' in d) || d.assignedTo == null
+            || (d.assignedBy == email && optStr(d, 'assignedName', 80)
+                && (d.assignedTo == email
+                    || (m.role in ['admin', 'manager'] && exists(/databases/$(database)/documents/staff/$(d.assignedTo))))));
+    }
+    // "Officer attached" must be one of the officers listed in /publicOfficers.
+    function validAttachedOfficer(d) {
+      return !('attachedOfficerId' in d)
+        || (d.attachedOfficerId is string && d.attachedOfficerId.matches('^[a-f0-9]{8,64}$')
+            && exists(/databases/$(database)/documents/publicOfficers/$(d.attachedOfficerId))
+            && optStr(d, 'attachedOfficerName', 80));
     }
 
     // ---- Lead counter (gives sequential IDs like VFC-2026-0001) ----
@@ -105,14 +137,20 @@ service cloud.firestore {
     match /leads/{leadId} {
       allow create: if validNewLead(request.resource.data, leadId);
 
-      allow get: if canViewAll() || isOfficerOf(resource.data);
-      allow list: if canViewAll() || (isStaff() && resource.data.assignedTo == myEmail());
+      allow get: if canViewAll() || isOfficerOf(resource.data) || isAttachedTo(resource.data);
+      allow list: if canViewAll() || (isStaff() && resource.data.assignedTo == myEmail()) || isAttachedTo(resource.data);
 
       // Managers/admins: assign and update progress. Customer answers are never edited.
       allow update: if isManager()
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(workKeys().concat(assignKeys()))
         && validAssignment()
+        && request.resource.data.updatedBy == myEmail();
+
+      // The officer a customer attached takes the lead straight away (only to themselves).
+      allow update: if isAttachedTo(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(workKeys().concat(assignKeys()))
+        && request.resource.data.assignedTo == myEmail() && request.resource.data.assignedBy == myEmail()
         && request.resource.data.updatedBy == myEmail();
 
       // Officers: update progress on their own leads only. They cannot reassign.
@@ -133,7 +171,8 @@ service cloud.firestore {
       match /activity/{activityId} {
         function parent() { return get(/databases/$(database)/documents/leads/$(leadId)).data; }
         allow read: if canViewAll() || isOfficerOf(parent());
-        allow create: if (isManager() || isOfficerOf(parent()))
+        // getAfter: a note written together with the assignment (same batch) counts.
+        allow create: if (isManager() || isOfficerOf(getAfter(/databases/$(database)/documents/leads/$(leadId)).data))
           && request.resource.data.keys().hasOnly(['type', 'text', 'by', 'byName', 'at'])
           && request.resource.data.by == myEmail()
           && request.resource.data.at == request.time
@@ -151,6 +190,27 @@ service cloud.firestore {
              request.resource.data.keys().hasOnly(['name', 'location', 'contactName', 'contactPhone', 'active', 'addedBy', 'addedAt'])
              && reqStr(request.resource.data, 'name', 2, 80)
              && partnerId.matches('^[a-z0-9_-]{2,60}$')));
+    }
+
+    // ---- Public list of credit officers for the "Officer attached" dropdown ----
+    // Only a display name: no email or phone. The admin's portal keeps it in sync with Team.
+    match /publicOfficers/{id} {
+      allow read: if true;
+      allow write: if isAdmin()
+        && (request.resource == null || (
+             request.resource.data.keys().hasOnly(['name', 'active'])
+             && reqStr(request.resource.data, 'name', 2, 80)
+             && request.resource.data.active is bool
+             && id.matches('^[a-f0-9]{8,64}$')));
+    }
+
+    // ---- Who gets an email for every new lead (read by the Google Sheet script) ----
+    match /settings/notify {
+      allow read: if isAdmin();
+      allow write: if isAdmin()
+        && request.resource.data.keys().hasOnly(['emails', 'updatedBy', 'updatedAt'])
+        && request.resource.data.emails is list && request.resource.data.emails.size() <= 30
+        && request.resource.data.updatedBy == myEmail();
     }
 
     // ---- Team ----

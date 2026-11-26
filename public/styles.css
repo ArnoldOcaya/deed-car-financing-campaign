@@ -124,6 +124,9 @@ legend { font-size: 1.25rem; font-weight: 800; color: var(--brand); margin-botto
 .hint { font-size: .85rem; color: var(--muted); margin: 6px 0 0; }
 .req { color: var(--danger); }
 .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row2 .field { min-width: 0; }
+.field select:disabled { background: #f4f5f9; color: var(--muted); }
 .seg, .stack { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; border: 2px solid transparent; border-radius: 14px; }
 .stack { grid-auto-flow: row; }
 .seg-wrap { grid-auto-flow: row; grid-template-columns: 1fr 1fr; }

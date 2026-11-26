@@ -91,6 +91,44 @@ await t("batch update + activity (portal pattern)", assertSucceeds((async () => 
 await t("officer cannot delete lead", assertFails((async () => { const { deleteDoc } = await import("firebase/firestore"); await deleteDoc(doc(off, "leads", ids[0])); })()));
 await t("public reads partner", assertSucceeds((async () => { await setDoc(doc(owner, "partners", "banda_bond"), { name: "Banda Bond", location: "Banda", active: true }); await getDoc(doc(pub, "partners", "banda_bond")); })()));
 await t("manager cannot add partner", assertFails(setDoc(doc(mgr, "partners", "x_bond"), { name: "X Bond", active: true })));
+// Officer attached (public dropdown) and staff-entered leads
+const OID = "a1b2c3d4e5f60718";
+await t("admin publishes officer name", assertSucceeds(setDoc(doc(owner, "publicOfficers", OID), { name: "Off", active: true })));
+await t("public officer list has no extra fields", assertFails(setDoc(doc(owner, "publicOfficers", "b1b2c3d4e5f60718"), { name: "Off2", active: true, phone: "+256772000006" })));
+await t("manager cannot edit officer list", assertFails(setDoc(doc(mgr, "publicOfficers", "c1b2c3d4e5f60718"), { name: "X", active: true })));
+await t("public reads officer list", assertSucceeds(getDocs(collection(pub, "publicOfficers"))));
+await t("public lead with officer attached", assertSucceeds(submit(pub, { attachedOfficerId: OID, attachedOfficerName: "Off" })));
+await t("public lead with unknown officer rejected", assertFails(submit(pub, { attachedOfficerId: "ffffffffffffffff", attachedOfficerName: "Fake" })));
+await t("public cannot pose as staff entry", assertFails(submit(pub, { enteredBy: "off@test.com", source: "staff_entry" })));
+await t("officer enters lead for customer (self-assigned)", assertSucceeds(submit(off, { source: "staff_entry", enteredBy: "off@test.com", enteredByName: "Off", assignedTo: "off@test.com", assignedName: "Off", assignedBy: "off@test.com" })));
+await t("officer cannot enter lead for another officer", assertFails(submit(off, { source: "staff_entry", enteredBy: "off@test.com", assignedTo: "off2@test.com", assignedBy: "off@test.com" })));
+await t("officer cannot fake enteredBy", assertFails(submit(off, { source: "staff_entry", enteredBy: "mgr@test.com" })));
+await t("manager enters lead and assigns officer", assertSucceeds(submit(mgr, { source: "staff_entry", enteredBy: "mgr@test.com", enteredByName: "Mgr", assignedTo: "off2@test.com", assignedName: "Off2", assignedBy: "mgr@test.com" })));
+await t("manager cannot assign entry to non-staff", assertFails(submit(mgr, { source: "staff_entry", enteredBy: "mgr@test.com", assignedTo: "nobody@test.com", assignedBy: "mgr@test.com" })));
+await t("director enters unassigned lead", assertSucceeds(submit(dir, { source: "staff_entry", enteredBy: "dir@test.com", enteredByName: "Dir" })));
+await t("stranger cannot enter staff lead", assertFails(submit(stranger, { source: "staff_entry", enteredBy: "bob@test.com" })));
+const FULL = { contactTime: "Morning", questions: "Can I pay over 3 years?", timeline: "Within 1 month", incomeSource: "Employed", canRaise: "Yes",
+  fromPartner: "Yes", vehicleMake: "Toyota", vehicleModel: "Harrier", contributionPct: 30 };
+await t("full public application with officer attached", assertSucceeds(submit(pub, { ...FULL, attachedOfficerId: OID, attachedOfficerName: "Off" })));
+await t("full staff entry, manager assigns, officer attached", assertSucceeds(submit(mgr, { ...FULL, attachedOfficerId: OID, attachedOfficerName: "Off", source: "staff_entry", enteredBy: "mgr@test.com", enteredByName: "Mgr", assignedTo: "off@test.com", assignedName: "Off", assignedBy: "mgr@test.com" })));
+await t("browser details no longer stored in Firestore", assertFails(submit(pub, { userAgent: "Mozilla" })));
+// A lead with an officer attached goes straight to that officer
+const { createHash } = await import("crypto");
+const key = (e) => createHash("sha256").update("deed-officer:" + e).digest("hex").slice(0, 20);
+const KOFF = key("off@test.com");
+await setDoc(doc(owner, "publicOfficers", KOFF), { name: "Off", active: true });
+let attId;
+await t("public lead attached to real officer", (async () => { attId = await assertSucceeds(submit(pub, { attachedOfficerId: KOFF, attachedOfficerName: "Off" })); })());
+await t("attached officer finds it", (async () => { const q = await assertSucceeds(getDocs(query(collection(off, "leads"), where("attachedOfficerId", "==", KOFF), where("assignedTo", "==", null)))); if (!q.docs.some((d) => d.id === attId)) throw new Error("not found"); })());
+await t("other officer cannot see it", assertFails(getDoc(doc(off2, "leads", attId))));
+await t("other officer cannot claim it", assertFails(updateDoc(doc(off2, "leads", attId), { assignedTo: "off2@test.com", assignedBy: "off2@test.com", updatedBy: "off2@test.com" })));
+await t("attached officer cannot give it to someone else", assertFails(updateDoc(doc(off, "leads", attId), { assignedTo: "off2@test.com", assignedBy: "off@test.com", updatedBy: "off@test.com" })));
+await t("attached officer takes it (with activity, portal batch)", assertSucceeds((async () => { const b = writeBatch(off); b.update(doc(off, "leads", attId), { assignedTo: "off@test.com", assignedName: "Off", assignedBy: "off@test.com", assignedAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: "off@test.com" }); b.set(doc(collection(off, "leads", attId, "activity")), { type: "assign", text: "Assigned to Off (officer attached by customer)", by: "off@test.com", byName: "Off", at: serverTimestamp() }); await b.commit(); })()));
+await t("then it is theirs", assertSucceeds(getDoc(doc(off, "leads", attId))));
+await t("admin saves new-lead email list", assertSucceeds(setDoc(doc(owner, "settings", "notify"), { emails: ["director@test.com", "boss@deed.example"], updatedBy: "owner@test.com", updatedAt: serverTimestamp() })));
+await t("manager cannot change email list", assertFails(setDoc(doc(mgr, "settings", "notify"), { emails: ["x@test.com"], updatedBy: "mgr@test.com" })));
+await t("public cannot read email list", assertFails(getDoc(doc(pub, "settings", "notify"))));
+await t("admin removes officer from list", assertSucceeds((async () => { const { deleteDoc } = await import("firebase/firestore"); await deleteDoc(doc(owner, "publicOfficers", OID)); })()));
 await t("deactivated officer loses access", (async () => { await setDoc(doc(owner, "staff", "off@test.com"), { name: "Off", role: "officer", active: false, phone: "+256772000005" }); await assertFails(getDocs(query(collection(off, "leads"), where("assignedTo", "==", "off@test.com")))); })());
 console.log(`\n${pass} passed, ${failN} failed`);
 await env.cleanup();

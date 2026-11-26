@@ -313,3 +313,16 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--navy); }
   .qr-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* New lead email recipients */
+.email-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.email-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 13px; font-weight: 600; max-width: 100%; overflow-wrap: anywhere; }
+.email-chip button { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.email-chip button:hover { background: var(--red-50); color: var(--red); }
+.email-chip .icon { width: 14px; height: 14px; }
+
+/* New lead modal: type switch */
+.seg-p { display: flex; gap: 8px; flex-wrap: wrap; }
+.seg-p label { display: inline-flex; gap: 8px; align-items: center; padding: 8px 14px; border: 1px solid var(--line); border-radius: 10px; font-weight: 600; cursor: pointer; }
+.seg-p label:has(input:checked) { border-color: var(--navy, #282c69); background: #eef0fb; }
+@media (max-width: 640px) { #nl .form-grid { grid-template-columns: 1fr; } }

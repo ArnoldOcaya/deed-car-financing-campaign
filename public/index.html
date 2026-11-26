@@ -146,10 +146,6 @@
               <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required placeholder="07XXXXXXXX or +2567XXXXXXXX" data-validate="ug-phone">
             </div>
             <div class="field">
-              <label for="alt_phone">Alternative phone number</label>
-              <input id="alt_phone" name="alt_phone" type="tel" inputmode="tel" placeholder="Optional" data-validate="ug-phone-optional">
-            </div>
-            <div class="field">
               <span class="label" id="contact_method_l">Preferred contact method <span class="req">*</span></span>
               <div class="seg" role="radiogroup" aria-labelledby="contact_method_l">
                 <label><input type="radio" name="contact_method" value="Call" required><span>Call</span></label>
@@ -166,23 +162,19 @@
           <!-- STEP 2: Vehicle -->
           <fieldset class="step" data-step="2" hidden>
             <legend>The vehicle</legend>
-            <div class="field">
-              <label for="vehicle">Which vehicle are you interested in? <span class="req">*</span></label>
-              <input id="vehicle" name="vehicle" required maxlength="100" placeholder="e.g. Toyota Harrier, Subaru Forester">
+            <div class="row2">
+              <div class="field">
+                <label for="vehicle_make">Car brand <span class="req">*</span></label>
+                <select id="vehicle_make" name="vehicle_make" required><option value="">Choose brand</option></select>
+              </div>
+              <div class="field">
+                <label for="vehicle_model">Model <span class="req">*</span></label>
+                <select id="vehicle_model" name="vehicle_model" required disabled><option value="">Choose brand first</option></select>
+              </div>
             </div>
-            <div class="row3">
-              <div class="field">
-                <label for="vehicle_make">Make</label>
-                <input id="vehicle_make" name="vehicle_make" maxlength="40" placeholder="Toyota">
-              </div>
-              <div class="field">
-                <label for="vehicle_model">Model</label>
-                <input id="vehicle_model" name="vehicle_model" maxlength="40" placeholder="Harrier">
-              </div>
-              <div class="field">
-                <label for="vehicle_year">Year</label>
-                <input id="vehicle_year" name="vehicle_year" inputmode="numeric" maxlength="4" placeholder="2015" data-validate="year-optional">
-              </div>
+            <div class="field" id="vehicle_other_wrap" hidden>
+              <label for="vehicle_other">Type the car <span class="req">*</span></label>
+              <input id="vehicle_other" name="vehicle_other" maxlength="60" placeholder="e.g. Peugeot 3008">
             </div>
             <div class="field">
               <label for="vehicle_price">Vehicle price (UGX) <span class="req">*</span></label>
@@ -200,9 +192,10 @@
                 <label><input type="radio" name="from_partner" value="Still deciding"><span>Deciding</span></label>
               </div>
             </div>
-            <div class="field" data-show-if="from_partner=Yes">
-              <label for="salesperson">Which car bond or salesperson are you dealing with?</label>
-              <input id="salesperson" name="salesperson" maxlength="80" placeholder="Optional">
+            <div class="field" id="officer_wrap" hidden>
+              <label for="attached_officer">Officer attached</label>
+              <select id="attached_officer" name="attached_officer"><option value="">None / not sure</option></select>
+              <p class="hint">If a DEED credit officer is already helping you, pick them.</p>
             </div>
           </fieldset>
 
@@ -236,10 +229,6 @@
               </select>
             </div>
             <div class="field">
-              <label for="repayment_period">Preferred repayment period</label>
-              <select id="repayment_period" name="repayment_period"></select>
-            </div>
-            <div class="field">
               <span class="label" id="income_l">Source of income <span class="req">*</span></span>
               <div class="seg seg-wrap" role="radiogroup" aria-labelledby="income_l">
                 <label><input type="radio" name="income_source" value="Employed" required><span>Employed</span></label>
@@ -253,13 +242,6 @@
           <!-- STEP 4: Follow-up + consent -->
           <fieldset class="step" data-step="4" hidden>
             <legend>Follow-up</legend>
-            <div class="field">
-              <span class="label" id="wants_contact_l">Would you like a DEED loan officer to contact you? <span class="req">*</span></span>
-              <div class="seg" role="radiogroup" aria-labelledby="wants_contact_l">
-                <label><input type="radio" name="wants_contact" value="Yes" required checked><span>Yes</span></label>
-                <label><input type="radio" name="wants_contact" value="No"><span>No</span></label>
-              </div>
-            </div>
             <div class="field">
               <span class="label" id="contact_time_l">Best time to contact you <span class="req">*</span></span>
               <div class="seg" role="radiogroup" aria-labelledby="contact_time_l">
@@ -366,6 +348,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="config.js"></script>
+  <script src="cars.js"></script>
   <script src="firebase-config.js"></script>
   <script src="app.js"></script>
 </body>

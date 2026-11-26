@@ -31,6 +31,14 @@ export function normalizeUgPhone(v) {
   return null;
 }
 
+// Public id for an officer in the "Officer attached" list: a hash, so the email isn't published.
+export async function officerKey(email) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("deed-officer:" + String(email).toLowerCase()));
+  return [...new Uint8Array(buf)].slice(0, 10).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+const LEAD_PREFIX = (window.DEED_CONFIG || {}).LEAD_PREFIX || "VFC-2026-";
+const cleanObj = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ""));
+
 export const STATUSES = [
   "New Lead", "Contact Attempted", "Contacted", "Interested", "Documents Pending",
   "Application Started", "Submitted for Assessment", "Approved",
@@ -100,8 +108,16 @@ async function firebaseBackend() {
     signOut() { return A.signOut(auth); },
     watchLeads(cb, onErr) {
       const col = F.collection(db, "leads");
-      const q = me.role === "officer" ? F.query(col, F.where("assignedTo", "==", me.email)) : col;
-      return F.onSnapshot(q, (s) => cb(s.docs.map(norm)), onErr);
+      if (me.role !== "officer") return F.onSnapshot(col, (s) => cb(s.docs.map(norm)), onErr);
+      // Officers: leads assigned to them, plus new ones where a customer picked them as "Officer attached".
+      let mine = [], attached = [], stopAtt = () => {};
+      const push = () => { const m = new Map(); attached.concat(mine).forEach((l) => m.set(l.id, l)); cb([...m.values()]); };
+      const stopMine = F.onSnapshot(F.query(col, F.where("assignedTo", "==", me.email)), (s) => { mine = s.docs.map(norm); push(); }, onErr);
+      officerKey(me.email).then((key) => {
+        stopAtt = F.onSnapshot(F.query(col, F.where("attachedOfficerId", "==", key), F.where("assignedTo", "==", null)),
+          (s) => { attached = s.docs.map(norm); push(); }, (e) => console.warn("[DEED] attached leads", e));
+      });
+      return () => { stopMine(); stopAtt(); };
     },
     watchStaff(cb, onErr) {
       return F.onSnapshot(F.collection(db, "staff"), (s) => cb(s.docs.map((d) => ({ email: d.id, ...d.data() }))), onErr);
@@ -137,7 +153,45 @@ async function firebaseBackend() {
       if (isNew) { payload.addedBy = me.email; payload.addedAt = F.serverTimestamp(); }
       return F.setDoc(F.doc(db, "partners", id), payload, { merge: true });
     },
-    deleteLead(id) { return F.deleteDoc(F.doc(db, "leads", id)); }
+    deleteLead(id) { return F.deleteDoc(F.doc(db, "leads", id)); },
+    // Staff enter a lead for a customer. Same numbering as the landing page.
+    async createLead(fields) {
+      const lead = cleanObj({ ...fields, source: "staff_entry", enteredBy: me.email, enteredByName: me.name,
+        status: "New Lead", outcome: "Open", contactAttempts: 0 });
+      lead.assignedTo = fields.assignedTo || null;
+      if (lead.assignedTo) { lead.assignedBy = me.email; lead.assignedAt = F.serverTimestamp(); }
+      return F.runTransaction(db, async (tx) => {
+        const cref = F.doc(db, "counters", "leads");
+        const snap = await tx.get(cref);
+        const n = (snap.exists() ? snap.data().n : 0) + 1;
+        const lref = F.doc(F.collection(db, "leads"));
+        const ref = LEAD_PREFIX + String(n).padStart(4, "0");
+        tx.set(lref, { ...lead, seq: n, ref, createdAt: F.serverTimestamp() });
+        tx.set(cref, { n, lastLead: lref.id });
+        return { id: lref.id, ref };
+      });
+    },
+    watchNotify(cb) {
+      return F.onSnapshot(F.doc(db, "settings", "notify"), (d) => cb((d.exists() && d.data().emails) || []), () => cb([]));
+    },
+    saveNotify(emails) {
+      return F.setDoc(F.doc(db, "settings", "notify"), { emails, updatedBy: me.email, updatedAt: F.serverTimestamp() });
+    },
+    // Admin only: keep the public "Officer attached" list equal to the active credit officers.
+    async syncPublicOfficers(staff) {
+      const want = new Map();
+      for (const s of staff) if (s.role === "officer" && s.active !== false && s.name) want.set(await officerKey(s.email), s.name);
+      const have = await F.getDocs(F.collection(db, "publicOfficers"));
+      const batch = F.writeBatch(db);
+      let n = 0;
+      have.forEach((d) => {
+        if (!want.has(d.id)) { batch.delete(d.ref); n++; }
+        else if (d.data().name !== want.get(d.id) || d.data().active !== true) { batch.set(d.ref, { name: want.get(d.id), active: true }); n++; }
+        want.delete(d.id);
+      });
+      want.forEach((name, id) => { batch.set(F.doc(db, "publicOfficers", id), { name, active: true }); n++; });
+      if (n) await batch.commit();
+    }
   };
 }
 
@@ -217,6 +271,7 @@ function demoBackend() {
     listeners.staff.forEach((cb) => cb(staff.map((s) => ({ ...s }))));
   };
   let authCb = null;
+  let notifyList = ["arnold@deed.example", "director@deed.example"];
   return {
     demo: true,
     staffList: staff,
@@ -259,7 +314,18 @@ function demoBackend() {
       emit();
     },
     async removeStaff(email) { const i = staff.findIndex((x) => x.email === email); if (i > -1) staff.splice(i, 1); emit(); },
-    async deleteLead(id) { const i = leads.findIndex((x) => x.id === id); if (i > -1) leads.splice(i, 1); emit(); }
+    async deleteLead(id) { const i = leads.findIndex((x) => x.id === id); if (i > -1) leads.splice(i, 1); emit(); },
+    async createLead(fields) {
+      const n = Math.max(0, ...leads.map((l) => l.seq || 0)) + 1;
+      const l = { ...cleanObj(fields), id: "demo-new" + n, seq: n, ref: LEAD_PREFIX + String(n).padStart(4, "0"), source: "staff_entry",
+        enteredBy: me.email, enteredByName: me.name, status: "New Lead", outcome: "Open", contactAttempts: 0, createdAt: new Date(),
+        assignedTo: fields.assignedTo || null, assignedName: fields.assignedName || null };
+      leads.unshift(l); emit();
+      return { id: l.id, ref: l.ref };
+    },
+    async syncPublicOfficers() {},
+    watchNotify(cb) { listeners.notify = cb; cb([...notifyList]); return () => {}; },
+    async saveNotify(emails) { notifyList = [...emails]; if (listeners.notify) listeners.notify([...notifyList]); }
   };
 }
 

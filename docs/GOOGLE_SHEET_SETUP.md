@@ -19,7 +19,7 @@ It creates:
 
 1. Signed in as DEED, create a new Google Sheet: <https://sheets.new>
 2. Menu **Extensions > Apps Script**. Delete what's there and paste the full contents of `apps-script/Code.gs`.
-3. Optional: at the top, set `NOTIFY_EMAILS` to the coordinator's email to get an email for every new lead.
+3. Who gets new-lead emails is set in the portal (see "New lead emails" below).
 4. Click **Save**, choose `setup` in the function dropdown, click **Run**. Approve the permissions
    (Google shows "unverified app" because it's your own script: **Advanced > Go to project**).
 5. Click **Deploy > New deployment**, gear icon > **Web app**:
@@ -30,6 +30,20 @@ It creates:
 7. Test: submit the form on the live page. A row should appear in both Raw Submissions and Lead Tracker.
 
 "Anyone" access only lets people *send* a lead to the script. Nobody can read the sheet unless you share it.
+
+## New lead emails (managed in the portal)
+
+The admin chooses who gets an email for every new lead in the portal: **Team > New lead emails**.
+The script reads that list from Firebase, so it needs two things once:
+
+1. The Google account that owns the sheet (DEED) has access to the Firebase project: Firebase console >
+   gear icon > **Users and permissions** > **Add member** > DEED's email, role **Owner** (or Editor).
+2. The script has the right permissions: Apps Script > **Project Settings** (gear) > tick
+   **Show "appsscript.json" manifest file in editor**. Back in the editor, open `appsscript.json` and replace it
+   with the contents of `apps-script/appsscript.json`. **Save**.
+
+Then choose `testEmail` in the function dropdown and click **Run** (approve the new permissions). It prints who gets
+the emails and sends them a test. Finally publish the new version (below).
 
 ## Changing the script later
 

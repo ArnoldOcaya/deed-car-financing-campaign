@@ -1,4 +1,4 @@
-import { createBackend, ROLES, ROLE_INFO, STATUSES, OUTCOMES, LOST_REASONS, normalizeUgPhone } from "./data.js";
+import { createBackend, ROLES, ROLE_INFO, STATUSES, OUTCOMES, LOST_REASONS, normalizeUgPhone, officerKey } from "./data.js";
 
 const site = window.DEED_CONFIG || {};
 const PCT = Number(site.CONTRIBUTION_PCT) || 30;
@@ -82,7 +82,7 @@ function followState(l) {
 /* State                                                               */
 /* ------------------------------------------------------------------ */
 const S = {
-  be: null, me: null, leads: [], staff: [], partners: [], unsub: [],
+  be: null, me: null, leads: [], staff: [], partners: [], unsub: [], officerByKey: {}, notify: [],
   route: "dashboard", openLead: null,
   filter: { chip: "all", q: "", status: "", officer: "", partner: "", source: "" },
   selected: new Set()
@@ -120,9 +120,44 @@ const partnerName = (l) => l.partnerName || (S.partners.find((p) => p.id === l.p
 
 function subscribe() {
   const err = (e) => fail(e);
-  S.unsub.push(S.be.watchLeads((l) => { S.leads = l.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); refreshDrawer(); }, err));
-  S.unsub.push(S.be.watchStaff((s) => { S.staff = s; render(); }, err));
+  S.unsub.push(S.be.watchLeads((l) => { S.leads = l.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)); render(); refreshDrawer(); autoRoute(); }, err));
+  S.unsub.push(S.be.watchStaff((s) => { S.staff = s; render(); onStaffChanged(s); }, err));
+  if (S.me.role === "admin") S.unsub.push(S.be.watchNotify((list) => { S.notify = list; if (S.route === "team") render(); }));
   S.unsub.push(S.be.watchPartners((p) => { S.partners = p.sort((a, b) => a.name.localeCompare(b.name)); render(); }, err));
+}
+
+// Map "Officer attached" ids back to team members, and (admin) keep the public officer list in sync.
+let syncT;
+async function onStaffChanged(list) {
+  const map = {};
+  try { for (const p of list) map[await officerKey(p.email)] = p.email; } catch (e) { /* no crypto: name fallback */ }
+  S.officerByKey = map;
+  if (S.openLead) refreshDrawer();
+  autoRoute();
+  if (isAdmin()) { clearTimeout(syncT); syncT = setTimeout(() => S.be.syncPublicOfficers(list).catch((e) => console.warn("[DEED] officer list sync", e)), 800); }
+}
+// A lead where the customer picked an "Officer attached" goes straight to that officer.
+// Whoever's portal sees it first does it: the officer themselves, or any manager/admin.
+const routed = new Set();
+function autoRoute() {
+  if (!S.me || !S.staff.length) return;
+  S.leads.forEach((l) => {
+    if (l.assignedTo || l.outcome !== "Open" || routed.has(l.id)) return;
+    const email = attachedEmail(l);
+    if (!email || !(isManager() || email === S.me.email)) return;
+    routed.add(l.id);
+    S.be.updateLead(l.id, { assignedTo: email, assignedName: staffName(email) },
+      { type: "assign", text: `Assigned to ${staffName(email)} (officer attached by customer)` })
+      .catch((e) => { routed.delete(l.id); console.warn("[DEED] auto-assign", e); });
+  });
+}
+// The team member a lead's "Officer attached" points to (email), if still on the team.
+function attachedEmail(l) {
+  if (!l.attachedOfficerId && !l.attachedOfficerName) return null;
+  const e = S.officerByKey[l.attachedOfficerId];
+  if (e && S.staff.some((s) => s.email === e && s.active !== false)) return e;
+  const byName = S.staff.find((s) => s.role === "officer" && s.active !== false && s.name === l.attachedOfficerName);
+  return byName ? byName.email : null;
 }
 
 function renderLogin(errMsg) {
@@ -384,7 +419,7 @@ function viewLeads() {
 
   return `
   <div class="page-head"><div><h2>${canViewAll() ? "All leads" : "My leads"}</h2><p>${rows.length} of ${S.leads.length} shown</p></div>
-    <div class="actions">${canViewAll() ? `<button class="btn" id="export">${icon("dl")} Export CSV</button>` : ""}</div></div>
+    <div class="actions">${canViewAll() ? `<button class="btn" id="export">${icon("dl")} Export CSV</button>` : ""}<button class="btn btn-primary" id="new-lead">${icon("plus")} New lead</button></div></div>
   <div class="card">
     <div class="chips" role="tablist">${chipDefs().map((c) => `<button class="chip ${f.chip === c.k ? "active" : ""}" data-chip="${c.k}" role="tab" aria-selected="${f.chip === c.k}">${c.label}<b>${c.n}</b></button>`).join("")}</div>
     <div class="toolbar">
@@ -424,6 +459,7 @@ function bindLeads() {
   };
   const bc = document.getElementById("bulk-clear"); if (bc) bc.onclick = () => { S.selected.clear(); render(); };
   const ex = document.getElementById("export"); if (ex) ex.onclick = exportCsv;
+  document.getElementById("new-lead").onclick = newLeadModal;
 }
 
 function assign(id, email) {
@@ -434,11 +470,11 @@ function assign(id, email) {
 
 function exportCsv() {
   const cols = [["Lead ID", "ref"], ["Received", (l) => l.createdAt ? new Date(l.createdAt).toISOString() : ""], ["Type", "leadType"], ["Partner bond", partnerName], ["Source", "source"],
-    ["Name", "fullName"], ["Phone", "phone"], ["Alt phone", "altPhone"], ["Contact method", "contactMethod"], ["Contact time", "contactTime"], ["Area", "area"],
-    ["Vehicle", "vehicle"], ["Make", "vehicleMake"], ["Model", "vehicleModel"], ["Year", "vehicleYear"], ["Vehicle price", "vehiclePrice"],
+    ["Name", "fullName"], ["Phone", "phone"], ["Contact method", "contactMethod"], ["Contact time", "contactTime"], ["Area", "area"],
+    ["Vehicle", "vehicle"], ["Make", "vehicleMake"], ["Model", "vehicleModel"], ["Vehicle price", "vehiclePrice"],
     ["30% contribution", (l) => l.vehiclePrice ? Math.round(l.vehiclePrice * PCT / 100) : ""], ["70% financing", (l) => l.vehiclePrice ? Math.round(l.vehiclePrice * (100 - PCT) / 100) : ""],
-    ["Available contribution", "availableContribution"], ["Can raise 30%", "canRaise"], ["Timeline", "timeline"], ["Repayment period", "repaymentPeriod"], ["Income", "incomeSource"],
-    ["Buying from partner", "fromPartner"], ["Salesperson", "salesperson"], ["Questions", "questions"], ["Officer", (l) => l.assignedTo ? staffName(l.assignedTo) : ""],
+    ["Available contribution", "availableContribution"], ["Can raise 30%", "canRaise"], ["Timeline", "timeline"], ["Income", "incomeSource"],
+    ["Buying from partner", "fromPartner"], ["Officer attached", (l) => l.attachedOfficerName || l.salesperson || ""], ["Entered by", "enteredByName"], ["Questions", "questions"], ["Officer", (l) => l.assignedTo ? staffName(l.assignedTo) : ""],
     ["Status", "status"], ["Contact attempts", "contactAttempts"], ["Last contact", (l) => isoDate(l.lastContactAt)], ["Next follow-up", (l) => isoDate(l.nextFollowUp)],
     ["Loan app started", "loanAppStarted"], ["Loan app ref", "loanAppRef"], ["Outcome", "outcome"], ["Lost reason", "lostReason"]];
   const cell = (v) => { let s = String(v ?? ""); if (/^[=+\-@]/.test(s)) s = "'" + s; return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -488,6 +524,7 @@ function drawLead() {
   const opt = (v, cur, label) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(label || v)}</option>`;
   const kv = (k, v) => v || v === 0 ? `<div><small>${k}</small><span>${esc(v)}</span></div>` : "";
   const editable = canEditLead(l);
+  const attEmail = attachedEmail(l);
 
   drawerRoot.innerHTML = `
   <div class="scrim" data-close></div>
@@ -509,7 +546,8 @@ function drawLead() {
       ${isManager() ? `<div class="card card-pad section"><h3>Assignment</h3>
         <div style="display:flex;gap:8px"><select class="input" id="d-assign"><option value="">Unassigned</option>${officers().map((o) => opt(o.email, l.assignedTo, `${o.name} · ${ROLES[o.role]}`)).join("")}</select>
         <button class="btn btn-primary" id="d-assign-go">Assign</button></div>
-        ${l.assignedTo ? `<p class="muted" style="margin:8px 0 0">Assigned to <b>${esc(staffName(l.assignedTo))}</b>${l.assignedAt ? " · " + fmtDateTime(l.assignedAt) : ""}</p>` : ""}</div>` : ""}
+        ${l.assignedTo ? `<p class="muted" style="margin:8px 0 0">Assigned to <b>${esc(staffName(l.assignedTo))}</b>${l.assignedAt ? " · " + fmtDateTime(l.assignedAt) : ""}</p>` : ""}
+        ${attEmail && attEmail !== l.assignedTo ? `<button class="btn btn-sm" id="d-assign-att" style="margin-top:10px">${icon("user")} Assign to ${esc(staffName(attEmail))} (officer attached)</button>` : ""}</div>` : ""}
 
       <div class="card card-pad section" id="progress"><h3>Progress${editable ? "" : ` <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:500">· view only</span>`}</h3>
         <fieldset ${editable ? "" : "disabled"} style="border:0;padding:0;margin:0;min-width:0"><div class="form-grid">
@@ -532,7 +570,8 @@ function drawLead() {
       <div class="card card-pad section"><h3>Customer</h3><div class="kv">
         ${kv("Phone", l.phone)}${kv("Alt. phone", l.altPhone)}${kv("Prefers", [l.contactMethod, l.contactTime].filter(Boolean).join(", "))}${kv("Area", l.area)}
         ${kv("Vehicle", l.vehicle)}${kv("Make / model / year", [l.vehicleMake, l.vehicleModel, l.vehicleYear].filter(Boolean).join(" "))}${kv("Price", price ? "UGX " + ugx(price) : "")}
-        ${kv("Partner bond", partnerName(l))}${kv("Buying from partner", l.fromPartner)}${kv("Salesperson", l.salesperson)}${kv("QR source", l.source)}
+        ${kv("Officer attached", l.attachedOfficerName || l.salesperson)}${kv("Entered by", l.enteredByName ? l.enteredByName + " (staff entry)" : "")}
+        ${kv("Partner bond", partnerName(l))}${kv("Buying from partner", l.fromPartner)}${kv("QR source", l.source === "staff_entry" ? "Entered by staff" : l.source)}
         ${kv("Timeline", l.timeline)}${kv("Repayment", l.repaymentPeriod)}${kv("Income", l.incomeSource)}${kv("Wants contact", l.wantsContact)}
       </div>${l.questions ? `<div style="margin-top:12px;padding:10px 12px;background:var(--bg);border-radius:10px"><small class="muted" style="font-weight:600">QUESTION FROM CUSTOMER</small><p style="margin:4px 0 0">${esc(l.questions)}</p></div>` : ""}</div>
 
@@ -571,6 +610,12 @@ function bindDrawer(l) {
     ag.disabled = true;
     try { await assign(l.id, email); toast(email ? "Assigned to " + staffName(email) : "Unassigned"); } catch (e) { fail(e); ag.disabled = false; }
   };
+  const aa = document.getElementById("d-assign-att");
+  if (aa) aa.onclick = async () => {
+    const email = attachedEmail(l); if (!email) return;
+    aa.disabled = true;
+    try { await assign(l.id, email); toast("Assigned to " + staffName(email)); } catch (e) { fail(e); aa.disabled = false; }
+  };
   document.getElementById("d-save").onclick = async (ev) => {
     const btn = ev.currentTarget;
     const status = document.getElementById("d-status").value;
@@ -604,6 +649,127 @@ function bindDrawer(l) {
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { if (modalRoot.innerHTML) closeModal(); else if (S.openLead) closeDrawer(); } });
 
 /* ------------------------------------------------------------------ */
+/* New lead entered by staff (for customers who won't scan the QR)     */
+/* ------------------------------------------------------------------ */
+// Copy a staff-entered lead to the DEED Google Sheet, which also sends the new-lead emails.
+function sheetCopy(f, ref) {
+  if (!site.SHEET_ENDPOINT || S.be.demo) return;
+  const body = { lead_ref: ref, lead_type: f.leadType, source: "staff_entry", partner_id: f.partnerId || "", partner_name: f.partnerName || "",
+    full_name: f.fullName, phone: f.phone, contact_method: f.contactMethod, contact_time: f.contactTime || "", area: f.area || "",
+    vehicle: f.vehicle || "", vehicle_make: f.vehicleMake || "", vehicle_model: f.vehicleModel || "", vehicle_price: f.vehiclePrice || "",
+    from_partner: f.fromPartner || "", can_raise: f.canRaise || "", available_contribution: f.availableContribution ?? "",
+    timeline: f.timeline || "", income_source: f.incomeSource || "", questions: f.questions || "", consent: "Yes",
+    attached_officer: f.attachedOfficerName || "", entered_by: S.me.name, contribution_pct: PCT,
+    submission_id: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()), submitted_at_client: new Date().toISOString() };
+  fetch(site.SHEET_ENDPOINT, { method: "POST", mode: "no-cors", keepalive: true, headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) }).catch(() => {});
+}
+
+function newLeadModal() {
+  const CARS = window.DEED_CARS || {};
+  const opt = (v, label, sel) => `<option value="${esc(v)}" ${sel ? "selected" : ""}>${esc(label || v)}</option>`;
+  const creditOfficers = S.staff.filter((s) => s.role === "officer" && s.active !== false).sort((a, b) => a.name.localeCompare(b.name));
+  const assignField = isManager()
+    ? `<div><label class="lbl" for="nl-assign">Assign to</label><select class="input" id="nl-assign"><option value="">Leave unassigned</option>${officers().map((o) => opt(o.email, `${o.name} · ${ROLES[o.role]}`)).join("")}</select></div>`
+    : S.me.role === "officer"
+      ? `<div><label class="lbl">Assigned to</label><div class="input" style="display:flex;align-items:center">You (${esc(S.me.name)})</div></div>`
+      : `<div><label class="lbl">Assigned to</label><div class="input muted" style="display:flex;align-items:center">A marketing manager will assign it</div></div>`;
+  openModal(`<div class="modal-head"><h3>New lead</h3><button class="btn btn-ghost" data-mclose>${icon("x")}</button></div>
+    <form id="nl" novalidate><div class="modal-body">
+      <p class="muted" style="margin:0 0 14px">For a customer who'd rather not scan the QR code. Fill in what they tell you.</p>
+      <div class="form-grid">
+        <div class="full"><label class="lbl">Type</label><div class="seg-p">
+          <label><input type="radio" name="nl-type" value="Application" checked> Application</label>
+          <label><input type="radio" name="nl-type" value="Call-back request"> Call-back only</label></div></div>
+        <div class="full"><label class="lbl" for="nl-name">Customer's full name *</label><input class="input" id="nl-name" maxlength="100" autocomplete="off"></div>
+        <div><label class="lbl" for="nl-phone">Phone number *</label><input class="input" id="nl-phone" type="tel" inputmode="tel" placeholder="07XXXXXXXX" autocomplete="off"></div>
+        <div><label class="lbl" for="nl-method">Prefers</label><select class="input" id="nl-method">${["Call", "WhatsApp", "Either"].map((v) => opt(v)).join("")}</select></div>
+        <div><label class="lbl" for="nl-area">Area</label><input class="input" id="nl-area" maxlength="80" placeholder="e.g. Kampala, Nakawa"></div>
+        <div><label class="lbl" for="nl-time">Best time</label><select class="input" id="nl-time"><option value="">Any time</option>${["Morning", "Afternoon", "Evening"].map((v) => opt(v)).join("")}</select></div>
+        <div class="nl-app"><label class="lbl" for="nl-make">Car brand *</label><select class="input" id="nl-make"><option value="">Choose brand</option>${Object.keys(CARS).map((b) => opt(b)).join("")}${opt("Other", "Other (type it)")}</select></div>
+        <div class="nl-app"><label class="lbl" for="nl-model">Model *</label><select class="input" id="nl-model" disabled><option value="">Choose brand first</option></select></div>
+        <div class="full nl-app" id="nl-other-wrap" hidden><label class="lbl" for="nl-other">Type the car *</label><input class="input" id="nl-other" maxlength="60"></div>
+        <div class="nl-app"><label class="lbl" for="nl-price">Vehicle price (UGX) *</label><input class="input num" id="nl-price" inputmode="numeric" data-money></div>
+        <div class="nl-app"><label class="lbl" for="nl-have">Can contribute now (UGX)</label><input class="input num" id="nl-have" inputmode="numeric" data-money></div>
+        <div class="nl-app"><label class="lbl" for="nl-raise">Can raise ${PCT}%?</label><select class="input" id="nl-raise"><option value="">—</option>${["Yes", "Partially", "Not yet, but interested"].map((v) => opt(v)).join("")}</select></div>
+        <div class="nl-app"><label class="lbl" for="nl-timeline">When to buy</label><select class="input" id="nl-timeline"><option value="">—</option>${["Within 2 weeks", "Within 1 month", "In 1 to 3 months", "In more than 3 months", "Just exploring"].map((v) => opt(v)).join("")}</select></div>
+        <div class="nl-app"><label class="lbl" for="nl-income">Income</label><select class="input" id="nl-income"><option value="">—</option>${["Employed", "Business owner", "Self-employed", "Other"].map((v) => opt(v)).join("")}</select></div>
+        <div><label class="lbl" for="nl-bond">Partner bond</label><select class="input" id="nl-bond"><option value="">None / not yet</option>${S.partners.filter((p) => p.active !== false).map((p) => opt(p.id, p.name, S.partners.length === 1)).join("")}</select></div>
+        <div><label class="lbl" for="nl-att">Officer attached</label><select class="input" id="nl-att"><option value="">None</option>${creditOfficers.map((o) => opt(o.email, o.name, S.me.role === "officer" && o.email === S.me.email)).join("")}</select></div>
+        ${assignField}
+        <div class="full"><label class="lbl" for="nl-q">Notes / customer's questions</label><textarea class="input" id="nl-q" rows="2" maxlength="1000"></textarea></div>
+        <div class="full"><label style="display:flex;gap:10px;align-items:flex-start;font-weight:600"><input type="checkbox" id="nl-consent" style="margin-top:3px"> The customer agreed to DEED Microfinance keeping these details and contacting them about vehicle financing.</label></div>
+        <p class="login-err full" id="nl-err" hidden style="margin:0"></p>
+      </div></div>
+    <div class="modal-foot"><button type="button" class="btn" data-mclose>Cancel</button><button class="btn btn-primary" type="submit" id="nl-go">Save lead</button></div></form>`, true);
+
+  const $id = (x) => document.getElementById(x);
+  const make = $id("nl-make"), model = $id("nl-model"), otherWrap = $id("nl-other-wrap");
+  const isApp = () => modalRoot.querySelector('input[name="nl-type"]:checked').value === "Application";
+  modalRoot.querySelectorAll('input[name="nl-type"]').forEach((r) => (r.onchange = () => modalRoot.querySelectorAll(".nl-app").forEach((el) => (el.style.display = isApp() ? "" : "none"))));
+  make.onchange = () => {
+    const b = make.value;
+    model.innerHTML = !b || b === "Other" ? `<option value="">${b ? "Type it below" : "Choose brand first"}</option>`
+      : `<option value="">Choose model</option>${(CARS[b] || []).map((m) => opt(m)).join("")}${opt("Other", "Other (type it)")}`;
+    model.disabled = !b || b === "Other";
+    otherWrap.hidden = b !== "Other";
+    otherWrap.querySelector("label").textContent = "Type the car (brand and model) *";
+  };
+  model.onchange = () => { otherWrap.hidden = model.value !== "Other"; otherWrap.querySelector("label").textContent = `Type the ${make.value} model *`; };
+  modalRoot.querySelectorAll("[data-money]").forEach((i) => (i.oninput = () => { const n = Number(i.value.replace(/\D/g, "")); i.value = n ? n.toLocaleString("en-US") : ""; }));
+  const num = (id) => Number($id(id).value.replace(/\D/g, "")) || 0;
+  const err = (m) => { const e = $id("nl-err"); e.textContent = m; e.hidden = false; };
+
+  $id("nl").onsubmit = async (e) => {
+    e.preventDefault();
+    const name = $id("nl-name").value.trim();
+    const phone = normalizeUgPhone($id("nl-phone").value);
+    if (name.length < 2) return err("Enter the customer's full name.");
+    if (!phone || !/^\+2567\d{8}$/.test(phone)) return err("Enter a Ugandan mobile number, e.g. 0772123456.");
+    const app = isApp();
+    let vehicle = "", vMake = "", vModel = "";
+    if (app) {
+      const other = $id("nl-other").value.trim();
+      if (!make.value) return err("Choose the car brand.");
+      if (make.value === "Other") { if (!other) return err("Type the car."); vehicle = other; }
+      else {
+        if (!model.value) return err("Choose the model.");
+        if (model.value === "Other" && !other) return err("Type the model.");
+        vMake = make.value; vModel = (model.value === "Other" ? other : model.value).slice(0, 40); vehicle = `${vMake} ${vModel}`;
+      }
+      if (num("nl-price") < 1000000) return err("Enter the vehicle price in UGX, e.g. 30,000,000.");
+    }
+    if (!$id("nl-consent").checked) return err("Confirm the customer agreed to be contacted.");
+    const bond = S.partners.find((p) => p.id === $id("nl-bond").value);
+    const attEmail = $id("nl-att").value;
+    const att = S.staff.find((x) => x.email === attEmail);
+    // Officer attached gets the lead straight away, unless a manager picked someone else.
+    const assignTo = isManager() ? ($id("nl-assign").value || (att ? att.email : "")) : S.me.role === "officer" ? S.me.email : "";
+    const fields = {
+      leadType: app ? "Application" : "Call-back request", fullName: name, phone, contactMethod: $id("nl-method").value,
+      area: $id("nl-area").value.trim(), contactTime: $id("nl-time").value, questions: $id("nl-q").value.trim(), consent: "Yes",
+      partnerId: bond ? bond.id : "", partnerName: bond ? bond.name : "", contributionPct: PCT,
+      attachedOfficerId: att ? await officerKey(att.email) : "", attachedOfficerName: att ? att.name : "",
+      assignedTo: assignTo || null, assignedName: assignTo ? staffName(assignTo) : ""
+    };
+    if (app) Object.assign(fields, { vehicle, vehicleMake: vMake, vehicleModel: vModel, vehiclePrice: num("nl-price"),
+      availableContribution: $id("nl-have").value ? num("nl-have") : undefined, canRaise: $id("nl-raise").value,
+      timeline: $id("nl-timeline").value, incomeSource: $id("nl-income").value, fromPartner: bond ? "Yes" : "" });
+    const btn = $id("nl-go"); btn.disabled = true; btn.textContent = "Saving…";
+    try {
+      const res = await S.be.createLead(fields);
+      sheetCopy(fields, res.ref);
+      closeModal();
+      toast(`Lead ${res.ref} saved`);
+      go("leads/" + encodeURIComponent(res.id));
+    } catch (er) {
+      btn.disabled = false; btn.textContent = "Save lead";
+      console.error(er);
+      err(er && er.code === "permission-denied" ? "The database refused this lead. Check the details (or ask the admin to update the security rules)." : "Couldn't save. Check your connection and try again.");
+    }
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Team (admin)                                                        */
 /* ------------------------------------------------------------------ */
 function viewTeam() {
@@ -623,12 +789,33 @@ function viewTeam() {
   return `<div class="page-head"><div><h2>Team</h2><p>Add the people who can sign in, their phone number and what they can do.</p></div>
     <div class="actions"><button class="btn btn-primary" id="add-person">${icon("plus")} Add person</button></div></div>
     ${missingPhone ? `<div class="card card-pad" style="margin-bottom:16px;border-color:#f6c9cb;background:var(--red-50);color:var(--red)"><b>${missingPhone} ${missingPhone > 1 ? "people need" : "person needs"} a phone number.</b> Click Edit to add it.</div>` : ""}
+    <div class="card card-pad" style="margin-bottom:16px">
+      <h3 style="margin:0 0 4px">New lead emails</h3>
+      <p class="muted" style="margin:0 0 12px">These people get an email for every new lead, assigned or not.</p>
+      <div class="email-chips">${S.notify.map((e) => `<span class="email-chip">${esc(e)}<button type="button" data-unnotify="${esc(e)}" aria-label="Remove ${esc(e)}">${icon("x")}</button></span>`).join("") || `<span class="muted">Nobody yet.</span>`}</div>
+      <form id="notify-form" style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap" novalidate>
+        <input class="input" id="notify-email" type="email" placeholder="name@example.com" style="flex:1;min-width:200px" list="notify-staff" autocomplete="off">
+        <datalist id="notify-staff">${S.staff.filter((p) => !S.notify.includes(p.email)).map((p) => `<option value="${esc(p.email)}">${esc(p.name)}</option>`).join("")}</datalist>
+        <button class="btn btn-primary" type="submit">${icon("plus")} Add</button>
+      </form>
+    </div>
     ${block("Management", "admin and director", ["admin", "director"])}
     ${block("Marketing team", "managers assign leads; marketing officers view", ["manager", "marketing"])}
     ${block("Credit officers", "follow up only their own leads", ["officer"])}`;
 }
 function bindTeam() {
   document.getElementById("add-person").onclick = () => personModal();
+  const saveList = (list) => S.be.saveNotify(list).then(() => toast("Email list saved")).catch(fail);
+  document.getElementById("notify-form").onsubmit = (e) => {
+    e.preventDefault();
+    const el = document.getElementById("notify-email");
+    const v = el.value.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return toast("Enter a valid email.", true);
+    if (S.notify.includes(v)) return toast("Already on the list.");
+    el.value = "";
+    saveList([...S.notify, v]);
+  };
+  app.querySelectorAll("[data-unnotify]").forEach((b) => (b.onclick = () => saveList(S.notify.filter((x) => x !== b.dataset.unnotify))));
   app.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => personModal(S.staff.find((s) => s.email === b.dataset.edit))));
 }
 function personModal(p, focusPhone) {
